@@ -1,85 +1,30 @@
-"""FamilyDaily — HA addon backend (M1 skeleton)."""
+"""FamilyDaily — HA addon backend."""
 
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import aiosqlite
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-DATA_DIR = Path(os.environ.get("FAMILYDAILY_DATA", "/data"))
-DB_PATH = DATA_DIR / "familydaily.db"
+from .db import DB_PATH, init_db
+from .shopping import router as shopping_router
+from .ws import broadcaster
 
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
 HA_API = "http://supervisor/core/api"
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS person (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    color TEXT NOT NULL DEFAULT '#4a90d9',
-    emoji TEXT,
-    calendar_entity_id TEXT
-);
-CREATE TABLE IF NOT EXISTS shopping_list (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    icon TEXT,
-    sort_order INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS shopping_item (
-    id INTEGER PRIMARY KEY,
-    list_id INTEGER NOT NULL REFERENCES shopping_list(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    category TEXT,
-    checked INTEGER NOT NULL DEFAULT 0,
-    checked_at TEXT
-);
-CREATE TABLE IF NOT EXISTS item_history (
-    name TEXT PRIMARY KEY,
-    category TEXT,
-    use_count INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS task_template (
-    id INTEGER PRIMARY KEY,
-    title TEXT NOT NULL,
-    person_ids TEXT NOT NULL DEFAULT '[]',
-    recurrence TEXT NOT NULL DEFAULT 'none',
-    recurrence_param INTEGER,
-    active INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS task (
-    id INTEGER PRIMARY KEY,
-    template_id INTEGER REFERENCES task_template(id) ON DELETE SET NULL,
-    title TEXT NOT NULL,
-    person_ids TEXT NOT NULL DEFAULT '[]',
-    due_date TEXT,
-    done INTEGER NOT NULL DEFAULT 0,
-    completed_at TEXT
-);
-CREATE TABLE IF NOT EXISTS meal (
-    id INTEGER PRIMARY KEY,
-    date TEXT NOT NULL UNIQUE,
-    title TEXT NOT NULL,
-    note TEXT,
-    url TEXT
-);
-"""
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.executescript(SCHEMA)
-        await db.commit()
+    await init_db()
     yield
 
 
 app = FastAPI(title="FamilyDaily", lifespan=lifespan)
+app.include_router(shopping_router)
 
 
 @app.get("/api/health")
@@ -101,6 +46,16 @@ async def ha_status():
         except httpx.HTTPError as exc:
             return {"connected": False, "error": str(exc)}
     return {"connected": True, "calendars": calendars}
+
+
+@app.websocket("/api/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await broadcaster.connect(ws)
+    try:
+        while True:
+            await ws.receive_text()  # keepalive pings from clients
+    except WebSocketDisconnect:
+        broadcaster.disconnect(ws)
 
 
 STATIC_DIR = Path(__file__).parent / "static"

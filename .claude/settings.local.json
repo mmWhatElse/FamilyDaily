@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "PowerShell(cd \"D:\\\\Dev\\\\Codex\\\\FamilyDaily\\\\familydaily\"; $env:FAMILYDAILY_DATA=\"./devdata\"; Start-Process python -ArgumentList \"-m\",\"uvicorn\",\"app.main:app\",\"--port\",\"8099\" -WindowStyle Hidden; Start-Sleep -Seconds 4; \\(Invoke-WebRequest http://127.0.0.1:8099/api/health -UseBasicParsing\\).Content)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force -Confirm:$false)",
+      "PowerShell(\"cleaned\")"
     ]
   }
 }
