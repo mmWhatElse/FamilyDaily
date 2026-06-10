@@ -98,37 +98,33 @@ item_history    name, category, use_count        -- feeds autocomplete
 
 Calendar events are **not** stored — always read from / written through HA.
 
-## Calendar Write-Back Design
+## Calendar Strategy (decided)
 
-- Create: HA service `calendar.create_event` with `target: <entity_id>` and
-  `summary`, `start_date_time`/`end_date_time` (or `start_date`/`end_date` for
-  all-day), `description`
-- Edit/Delete: support varies by integration; where HA exposes no service,
-  fall back to delete+recreate or mark the event read-only in the UI with a hint
+**HA Local Calendar integration is the family's primary calendar in V1.**
+One Local Calendar per family member (e.g. `calendar.familie_mama`,
+`calendar.familie_papa`, `calendar.familie_kind`), created once in HA.
+
+- Fully local (fits the privacy goal), full read/write support via HA services
+- Create: `calendar.create_event` with `summary`,
+  `start_date_time`/`end_date_time` (or `start_date`/`end_date` for all-day),
+  `description`
+- External calendars (work, school) can be added later as **read-only overlays**
 - Person → calendar mapping configured once in app settings
   (dropdown of HA calendar entities)
 
-## Riskiest Assumptions — verify BEFORE building
+## Remaining Assumptions — verify during M1
 
-Checklist for the live HA instance test:
-
-1. **Read:** `GET /api/calendars/<entity_id>?start=...&end=...` returns full event
-   lists (not just "next event") for the calendars we use
-2. **Write:** `calendar.create_event` service exists and works for our specific
-   integration (Google Calendar: requires read-write access in the integration
-   config; Local Calendar: supported; CalDAV: check!)
-3. **Edit/Delete:** what does our integration actually support? This decides how
-   much of the write-back UI we can build vs. gray out
-4. Addon `homeassistant_api: true` token can call both endpoints above
-
-If write-back turns out to be unsupported for our calendar provider, fallback plan:
-HA **Local Calendar** integration as the family's primary calendar (full read/write),
-with external calendars (work etc.) as read-only overlays.
+1. Addon with `homeassistant_api: true` can call
+   `GET /api/calendars/<entity_id>?start=...&end=...` and `calendar.create_event`
+   via the Supervisor token
+2. Local Calendar edit/delete behavior via API (HA supports updating/deleting
+   local calendar events through websocket API; REST coverage to confirm —
+   fallback: delete + recreate)
 
 ## Milestones
 
-1. **M0 — Verify HA calendar API** (read + write against live instance) ← in progress
-2. **M1 — Addon skeleton:** container builds, installs in HA, Ingress works,
+1. **M0 — Calendar strategy** ✅ decided: HA Local Calendar (read/write, fully local)
+2. **M1 — Addon skeleton:** ← in progress container builds, installs in HA, Ingress works,
    FastAPI serves a hello page, SQLite persists across restart
 3. **M2 — Einkaufen:** full lists feature incl. autocomplete + live sync
    (smallest module that proves the whole stack and is immediately useful)

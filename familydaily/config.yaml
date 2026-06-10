@@ -1,0 +1,23 @@
+name: FamilyDaily
+version: "0.1.0"
+slug: familydaily
+description: Familienkalender, Aufgaben, Einkaufslisten und Essensplan — lokal auf Home Assistant
+url: https://github.com/mmWhatElse/FamilyDaily
+arch:
+  - amd64
+  - aarch64
+  - armv7
+init: false
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:home-heart
+panel_title: FamilyDaily
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: Web-UI (direkter Zugriff fürs Handy-Lesezeichen)
+map:
+  - addon_config:rw
+options: {}
+schema: {}

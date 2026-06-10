@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>FamilyDaily</title>
+  <style>
+    :root {
+      --bg: #faf7f2;
+      --card: #ffffff;
+      --text: #2d2a26;
+      --muted: #8a857d;
+      --accent: #e8743b;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    main { flex: 1; padding: 24px 16px 80px; max-width: 480px; margin: 0 auto; width: 100%; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .date { color: var(--muted); margin-bottom: 24px; }
+    .card {
+      background: var(--card); border-radius: var(--radius);
+      padding: 16px; margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .card h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 8px; }
+    .status { font-size: 0.9rem; }
+    .ok { color: #3a8f5d; }
+    .err { color: #c0392b; }
+    nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--card); border-top: 1px solid #eee;
+      display: flex; justify-content: space-around;
+      padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+    }
+    nav span { font-size: 0.75rem; color: var(--muted); text-align: center; }
+    nav span.active { color: var(--accent); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Hallo Familie 👋</h1>
+    <p class="date" id="today"></p>
+
+    <div class="card">
+      <h2>Status</h2>
+      <p class="status" id="health">Prüfe Backend …</p>
+      <p class="status" id="ha">Prüfe Home Assistant …</p>
+    </div>
+
+    <div class="card">
+      <h2>Termine</h2>
+      <p class="status" id="calendars">–</p>
+    </div>
+  </main>
+
+  <nav>
+    <span class="active">📅 Heute</span>
+    <span>🗓️ Kalender</span>
+    <span>🛒 Listen</span>
+    <span>🍽️ Essen</span>
+  </nav>
+
+  <script>
+    document.getElementById("today").textContent =
+      new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+    fetch("api/health").then(r => r.json()).then(d => {
+      const el = document.getElementById("health");
+      el.textContent = d.status === "ok" ? "✓ Backend läuft, Datenbank bereit" : "✗ Backend-Problem";
+      el.className = "status " + (d.status === "ok" ? "ok" : "err");
+    }).catch(() => {
+      const el = document.getElementById("health");
+      el.textContent = "✗ Backend nicht erreichbar"; el.className = "status err";
+    });
+
+    fetch("api/ha/status").then(r => r.json()).then(d => {
+      const el = document.getElementById("ha");
+      if (d.connected) {
+        el.textContent = "✓ Mit Home Assistant verbunden"; el.className = "status ok";
+        const cals = (d.calendars || []).map(c => c.name || c.entity_id);
+        document.getElementById("calendars").textContent =
+          cals.length ? "Gefundene Kalender: " + cals.join(", ") : "Keine Kalender in Home Assistant gefunden — lege einen Lokalen Kalender an.";
+      } else {
+        el.textContent = "✗ Home Assistant: " + (d.error || "unbekannter Fehler"); el.className = "status err";
+      }
+    }).catch(() => {
+      const el = document.getElementById("ha");
+      el.textContent = "✗ Home Assistant nicht erreichbar"; el.className = "status err";
+    });
+  </script>
+</body>
+</html>
