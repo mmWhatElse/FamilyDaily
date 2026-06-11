@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.9.2] — 2026-06-11
+
+### Behoben
+- **SUPERVISOR_TOKEN fehlte im Addon:** s6-overlay v3 (HA-Base-Image) entfernt die vom
+  Supervisor injizierten Env-Variablen, wenn das `CMD` direkt gestartet wird. Der Start
+  läuft jetzt über `run.sh` mit `#!/usr/bin/with-contenv bashio` — damit sind
+  HA-Verbindung, Kalender und Benachrichtigungen im Addon-Betrieb funktionsfähig.
+
+---
+
 ## [0.9.1] — 2026-06-11
 
 ### Neu
