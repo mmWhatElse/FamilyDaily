@@ -417,6 +417,31 @@ ul.items li .del:active { color: var(--err); }
 .due-lbl { color: var(--muted); font-size: 0.75rem; }
 .due-lbl.overdue { color: var(--err); font-weight: 700; }
 
+/* ─── Toggle switch ─────────────────────────────────────────────────────────── */
+.setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0 14px; gap: 12px;
+}
+.setting-label { font-weight: 600; font-size: 0.95rem; }
+.setting-hint  { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.toggle {
+  position: relative; width: 48px; height: 28px; flex-shrink: 0; cursor: pointer;
+}
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  position: absolute; inset: 0; border-radius: 14px;
+  background: var(--line);
+  transition: background var(--dur) var(--ease);
+}
+.toggle-track::after {
+  content: ""; position: absolute; top: 4px; left: 4px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+  transition: transform var(--dur) var(--ease);
+}
+.toggle input:checked + .toggle-track { background: var(--accent); }
+.toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+
 /* ─── Essen ──────────────────────────────────────────────────────────────── */
 .meal-row {
   display: flex; align-items: center; gap: 14px;

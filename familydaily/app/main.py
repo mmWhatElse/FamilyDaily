@@ -1,7 +1,8 @@
 """FamilyDaily — HA addon backend."""
 
+import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from .calendar_api import router as calendar_router
 from .db import DB_PATH, init_db
 from .meals import router as meals_router
+from .notifications import notification_loop
+from .notifications import router as notifications_router
 from .persons import router as persons_router
 from .shopping import router as shopping_router
 from .tasks import router as tasks_router
@@ -24,7 +27,11 @@ HA_API = "http://supervisor/core/api"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    task = asyncio.create_task(notification_loop())
     yield
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
 
 
 app = FastAPI(title="FamilyDaily", lifespan=lifespan)
@@ -33,6 +40,7 @@ app.include_router(tasks_router)
 app.include_router(persons_router)
 app.include_router(calendar_router)
 app.include_router(meals_router)
+app.include_router(notifications_router)
 
 
 @app.get("/api/health")

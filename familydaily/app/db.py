@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS meal (
     note TEXT,
     url TEXT
 );
+CREATE TABLE IF NOT EXISTS notification_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER NOT NULL DEFAULT 0,
+    notify_service TEXT NOT NULL DEFAULT '',
+    task_reminder_time TEXT NOT NULL DEFAULT '08:00',
+    event_lead_minutes INTEGER NOT NULL DEFAULT 30
+);
+CREATE TABLE IF NOT EXISTS notification_sent (
+    key TEXT PRIMARY KEY,
+    sent_at TEXT NOT NULL
+);
 """
 
 

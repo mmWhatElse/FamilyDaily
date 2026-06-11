@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [Unreleased]
+
+### Neu
+- **Benachrichtigungen:** Push-Erinnerungen über HA Companion App via `notify`-Services
+  - Backend prüft jede Minute: Aufgaben-Erinnerung zur konfigurierten Uhrzeit, Termin-Vorlaufzeit vor Kalender-Events
+  - Konfigurierbar in Einstellungen: Notify-Service (Dropdown aus HA), Erinnerungszeit (HH:MM), Vorlaufzeit (15 / 30 / 60 Min.), An/Aus-Toggle
+  - Testbenachrichtigung direkt aus den Einstellungen
+  - Deduplizierung: jede Erinnerung wird pro Tag/Event nur einmal gesendet
+- **Heute-Tab:** Kompakter Wochenüberblick (Mo–So) mit Meal- und Aufgaben-Dots, heutige Spalte orange hervorgehoben
+
+### Geändert
+- `isoDate()` nutzt lokale Datumsteile statt UTC (behebt Off-by-One in UTC+1/+2)
+
+---
+
 ## [0.9.0] — 2026-06-11
 
 ### Neu

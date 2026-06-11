@@ -15,6 +15,7 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 | **Essen** | Wochenplan Abendessen, letzte Woche übernehmen |
 | **Einstellungen** | Familienmitglieder verwalten, HA-Kalender pro Person zuordnen |
 | **Einkaufen** | Mehrere Listen, Autovervollständigung, Live-Sync zwischen Geräten |
+| **Benachrichtigungen** | Push-Erinnerungen über HA Companion App — konfigurierbar in Einstellungen |
 
 ## Voraussetzungen
 

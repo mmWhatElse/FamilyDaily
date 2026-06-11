@@ -712,12 +712,18 @@ function openMealForm(day, existing) {
 /* ---------- Einstellungen ---------- */
 
 async function viewEinstellungen() {
-  const [persons, haRaw] = await Promise.all([
+  const [persons, haRaw, notifSettings, notifSvcRaw] = await Promise.all([
     api.get("api/persons").catch(() => []),
     api.get("api/persons/ha-calendars").catch(() => ({ error: "Nicht erreichbar" })),
+    api.get("api/notifications/settings").catch(() => null),
+    api.get("api/notifications/services").catch(() => ({ services: [] })),
   ]);
   const haCalendars = Array.isArray(haRaw) ? haRaw : [];
   const haError     = haRaw?.error;
+  const notifSvc    = notifSvcRaw?.services || [];
+  const ns = notifSettings || {
+    enabled: false, notify_service: "", task_reminder_time: "08:00", event_lead_minutes: 30,
+  };
 
   function personCard(p) {
     return el("div", { class: "person-card" },
@@ -739,6 +745,97 @@ async function viewEinstellungen() {
     );
   }
 
+  // ── Benachrichtigungen-Karte ──────────────────────────────────────────────
+
+  const enabledCb = Object.assign(document.createElement("input"), {
+    type: "checkbox", checked: ns.enabled,
+  });
+
+  const serviceSelect = document.createElement("select");
+  serviceSelect.className = "form-input";
+  if (notifSvc.length === 0) {
+    serviceSelect.appendChild(
+      new Option(haError ? "Keine HA-Verbindung" : "Keine Notify-Services gefunden", "")
+    );
+  } else {
+    serviceSelect.appendChild(new Option("— Service wählen —", ""));
+    notifSvc.forEach((s) =>
+      serviceSelect.appendChild(new Option(s, s, false, s === ns.notify_service))
+    );
+  }
+  // Keep previously saved service visible even if HA is currently offline
+  if (ns.notify_service && !notifSvc.includes(ns.notify_service)) {
+    serviceSelect.appendChild(
+      new Option(ns.notify_service, ns.notify_service, false, true)
+    );
+  }
+
+  const timeInput = Object.assign(document.createElement("input"), {
+    type: "time", className: "form-input", value: ns.task_reminder_time,
+  });
+
+  const leadSelect = document.createElement("select");
+  leadSelect.className = "form-input";
+  [15, 30, 60].forEach((m) =>
+    leadSelect.appendChild(
+      new Option(`${m} Minuten`, String(m), false, m === ns.event_lead_minutes)
+    )
+  );
+
+  const statusMsg = document.createElement("p");
+  statusMsg.style.cssText = "font-size:0.85rem;min-height:1.2em;margin-top:6px";
+  function setStatus(cls, text) {
+    statusMsg.className = cls;
+    statusMsg.textContent = text;
+    setTimeout(() => { statusMsg.textContent = ""; }, 3000);
+  }
+
+  const toggleEl = document.createElement("label");
+  toggleEl.className = "toggle";
+  toggleEl.appendChild(enabledCb);
+  const toggleTrack = document.createElement("span");
+  toggleTrack.className = "toggle-track";
+  toggleEl.appendChild(toggleTrack);
+
+  const notifCard = el("div", { class: "card" },
+    el("h2", {}, "Benachrichtigungen"),
+    el("div", { class: "setting-row" },
+      el("div", {},
+        el("div", { class: "setting-label" }, "Push-Erinnerungen"),
+        el("div", { class: "setting-hint" }, "Über HA Companion App")
+      ),
+      toggleEl
+    ),
+    el("p", { class: "form-field-label", style: "margin-top:4px" }, "Notify-Service"),
+    serviceSelect,
+    el("p", { class: "form-field-label", style: "margin-top:10px" }, "Aufgaben-Erinnerung um"),
+    timeInput,
+    el("p", { class: "form-field-label", style: "margin-top:10px" }, "Termin-Vorlaufzeit"),
+    leadSelect,
+    statusMsg,
+    el("div", { class: "form-btns", style: "margin-top:16px" },
+      el("button", { class: "btn-ghost", onclick: async () => {
+        setStatus("muted", "Sende…");
+        const r = await api.post("api/notifications/test", {}).catch(() => null);
+        r?.ok
+          ? setStatus("ok", "✓ Testbenachrichtigung gesendet")
+          : setStatus("err", "✗ Fehler — Service konfiguriert?");
+      }}, "Test senden"),
+      el("button", { class: "btn-soft", onclick: async () => {
+        setStatus("muted", "Speichern…");
+        const r = await api.put("api/notifications/settings", {
+          enabled: enabledCb.checked,
+          notify_service: serviceSelect.value,
+          task_reminder_time: timeInput.value,
+          event_lead_minutes: parseInt(leadSelect.value, 10),
+        }).catch(() => null);
+        r?.ok
+          ? setStatus("ok", "✓ Gespeichert")
+          : setStatus("err", "✗ Fehler beim Speichern");
+      }}, "Speichern")
+    )
+  );
+
   setMain(
     el("h1", {}, "Einstellungen"),
     el("p", { class: "subtitle" }, "Personen & Kalender"),
@@ -758,7 +855,9 @@ async function viewEinstellungen() {
         : el("p", { class: "muted", style: "margin-bottom:12px" }, "Noch keine Personen angelegt"),
       el("button", { class: "btn-soft", onclick: () => openPersonForm(null, haCalendars) },
         "+ Person hinzufügen")
-    )
+    ),
+
+    notifCard
   );
 }
 
