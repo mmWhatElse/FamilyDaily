@@ -1,4 +1,3 @@
-# FamilyDaily
 <img src="familydaily/logo.png" alt="FamilyDaily" width="460">
 Selbst gehosteter Familien-Planer als Home-Assistant-Addon — Kalender, Aufgaben,
 Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung.
