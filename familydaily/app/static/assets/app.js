@@ -39,6 +39,23 @@ function showLoading() {
   ));
 }
 
+function emptyState(icon, title, sub) {
+  return el("div", { class: "empty-state" },
+    el("div", { class: "empty-icon" }, icon),
+    el("p", { class: "empty-title" }, title),
+    sub ? el("p", { class: "empty-sub" }, sub) : null
+  );
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5)  return "Gute Nacht 🌙";
+  if (h < 12) return "Guten Morgen ☀️";
+  if (h < 17) return "Hallo 👋";
+  if (h < 21) return "Guten Abend 🌅";
+  return "Gute Nacht 🌙";
+}
+
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -54,7 +71,10 @@ function el(tag, attrs = {}, ...children) {
 }
 
 function isoDate(d = new Date()) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function fmtDate(iso) {
@@ -119,16 +139,16 @@ async function viewHeute() {
   });
   const meal = meals[0];
 
+  // Calendar card content
   let calContent;
   if (!cal || cal.error) {
-    calContent = el("p", { class: "muted", style: "font-size:0.9rem" }, "Kalender nicht verbunden — Einstellungen prüfen");
+    calContent = emptyState("📡", "Kalender nicht verbunden", "In Einstellungen Kalender zuordnen");
   } else if (cal.length === 0) {
-    calContent = el("p", { class: "muted", style: "font-size:0.9rem" }, "Keine Termine heute");
+    calContent = emptyState("🗓️", "Frei heute", "Keine Termine eingetragen");
   } else {
     calContent = el("ul", { class: "event-list" }, ...cal.map((ev) => {
       const time = fmtTime(ev.start);
       return el("li", { class: "event-item", style: `--pc:${ev.color}` },
-        el("span", { class: "event-dot" }),
         el("span", { class: "event-body" },
           el("span", { class: "event-title" }, ev.summary),
           el("span", { class: "event-meta" },
@@ -139,9 +159,10 @@ async function viewHeute() {
     }));
   }
 
+  // Tasks card content
   let taskContent;
   if (tasks.length === 0) {
-    taskContent = el("p", { class: "muted", style: "font-size:0.9rem" }, "Keine offenen Aufgaben heute");
+    taskContent = emptyState("✅", "Alles erledigt", "Keine offenen Aufgaben heute");
   } else {
     taskContent = el("ul", { class: "task-list" }, ...tasks.map((t) =>
       el("li", { class: "task-item" + (t.done ? " done" : "") },
@@ -155,37 +176,42 @@ async function viewHeute() {
   }
 
   setMain(
-    el("h1", {}, "Hallo Familie 👋"),
-    el("p", { class: "subtitle" }, todayLabel),
+    el("div", { class: "heute-header" },
+      el("h1", {}, greeting()),
+      el("div", { class: "date-pill" }, todayLabel)
+    ),
 
     el("div", { class: "card" }, el("h2", {}, "Termine heute"), calContent),
     el("div", { class: "card" }, el("h2", {}, "Aufgaben heute"), taskContent),
 
-    el("div", { class: "card" },
+    // Abendessen — tappable if empty
+    el("div", {
+      class: "card" + (meal ? "" : " card-tap"),
+      onclick: meal ? null : () => switchTab("essen"),
+    },
       el("h2", {}, "Abendessen"),
       meal
-        ? el("p", { class: "status" },
+        ? el("p", { class: "status", style: "font-weight:600" },
             meal.url
-              ? el("a", { href: meal.url, target: "_blank", class: "meal-link" }, meal.title)
-              : meal.title
+              ? el("a", { href: meal.url, target: "_blank", class: "meal-link" }, "🍽 " + meal.title)
+              : "🍽 " + meal.title
           )
-        : el("p", {
-            class: "status muted",
-            style: "cursor:pointer",
-            onclick: () => switchTab("essen"),
-          }, "Noch nichts geplant — tippen zum Planen")
+        : el("p", { class: "muted", style: "font-size:0.9rem" }, "Noch nichts geplant — tippen zum Eintragen →")
     ),
 
-    el("div", {
-      class: "card",
-      style: "cursor:pointer",
-      onclick: () => switchTab("listen"),
-    },
-      el("h2", {}, "Einkaufen"),
+    // Einkaufen — always tappable
+    el("div", { class: "card card-tap", onclick: () => switchTab("listen") },
+      el("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:12px" },
+        el("h2", { style: "margin:0" }, "Einkaufen"),
+        el("span", { style: "color:var(--muted);font-size:1.1rem;line-height:1" }, "›")
+      ),
       openTotal
-        ? el("p", { class: "status" },
-            `🛒 ${openTotal} Artikel auf ${lists.filter((l) => l.open_count > 0).length === 1 ? "der Liste" : "den Listen"}`)
-        : el("p", { class: "status muted" }, "Alles erledigt ✓")
+        ? el("div", { style: "display:flex;align-items:center;gap:10px" },
+            el("span", { class: "badge", style: "font-size:0.9rem;padding:5px 14px" }, String(openTotal)),
+            el("span", { class: "muted", style: "font-size:0.88rem" },
+              `Artikel auf ${lists.filter((l) => l.open_count > 0).length === 1 ? "der Liste" : "den Listen"}`)
+          )
+        : el("p", { class: "muted", style: "font-size:0.9rem" }, "Alle Listen leer ✓")
     )
   );
 }
@@ -206,9 +232,8 @@ async function viewKalender() {
   } catch (e) {
     setMain(
       el("h1", {}, "Kalender"),
-      el("div", { class: "card", style: "border-left:3px solid var(--err)" },
-        el("p", { class: "err" }, "HA-Kalender nicht erreichbar"),
-        el("p", { class: "muted", style: "font-size:0.85rem;margin-top:6px" },
+      el("div", { class: "card" },
+        emptyState("📡", "Kalender nicht verbunden",
           "In Einstellungen die Kalender-Entitäten den Personen zuordnen.")
       )
     );
@@ -292,6 +317,7 @@ function openEventForm() {
   });
 
   overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:14px" }, "Neuer Termin"),
     titleInput,
     dateInput,
@@ -388,8 +414,8 @@ async function viewAufgaben() {
     fetchOk
       ? (open.length
           ? el("ul", { class: "task-list" }, ...open.map(taskRow))
-          : el("p", { class: "empty" }, "Alles erledigt 🎉"))
-      : el("p", { class: "empty" }, "Backend nicht erreichbar"),
+          : emptyState("🎉", "Alles erledigt!", "Keine offenen Aufgaben"))
+      : emptyState("📡", "Backend nicht erreichbar", "Bitte App neu laden"),
     done.length ? el("p", { class: "section-label" }, "Erledigt") : null,
     done.length ? el("ul", { class: "task-list" }, ...done.map(taskRow)) : null
   );
@@ -416,6 +442,7 @@ function openTaskForm(persons) {
   const errMsg = el("p", { class: "err", style: "display:none" });
 
   overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:14px" }, "Neue Aufgabe"),
     titleInput,
     el("p", { class: "form-field-label" }, "Fälligkeitsdatum"),
@@ -614,6 +641,7 @@ function openMealForm(day, existing) {
   const errMsg = el("p", { class: "err", style: "display:none" });
 
   overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:4px" }, label),
     el("p", { class: "form-field-label", style: "margin-bottom:12px" }, "Abendessen"),
     titleInput, noteInput, urlInput, errMsg,
@@ -707,6 +735,7 @@ function openPersonForm(existing, haCalendars) {
   const errMsg = el("p", { class: "err", style: "display:none" });
 
   overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:14px" }, existing ? "Person bearbeiten" : "Neue Person"),
     nameInput,
     emojiInput,
@@ -752,11 +781,18 @@ const views = {
 };
 
 function switchTab(tab) {
+  if (state.tab === tab && !state.listId) return;
   state.tab = tab;
   state.listId = null;
   document.querySelectorAll("nav.tabs button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === tab));
-  render();
+  // Fade-out → swap content → fade-in
+  $main.style.cssText = "opacity:0;transform:translateY(7px);transition:opacity 0.1s,transform 0.12s";
+  setTimeout(async () => {
+    await render();
+    $main.style.cssText = "opacity:1;transform:translateY(0);transition:opacity 0.2s,transform 0.22s";
+    setTimeout(() => { $main.style.cssText = ""; }, 240);
+  }, 110);
 }
 
 async function render() {
