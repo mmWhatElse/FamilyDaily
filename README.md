@@ -34,6 +34,22 @@ Das Addon läuft vollständig ohne Internet. Daten liegen in SQLite unter `/data
 und bleiben bei Updates erhalten. Kalenderdaten werden nicht gespeichert — sie kommen
 direkt aus HA.
 
+## Manuelle Installation (ohne GitHub-Repository)
+
+Wer das Addon direkt vom lokalen Rechner installieren möchte, ohne ein öffentliches
+Repository einzutragen:
+
+1. Den Ordner `familydaily/` (enthält `config.yaml`, `Dockerfile` usw.) auf den HA-Host
+   kopieren — z. B. nach `/addons/familydaily/` via **Samba-Addon** (`\\<ha-host>\addons\`)
+   oder per **SSH-Addon** (`scp -r familydaily/ root@<ha-host>:/addons/familydaily/`).
+2. Im Add-on Store auf **„Lokale Add-ons"** (oben rechts) tippen — FamilyDaily erscheint dort.
+3. Installieren → das Image wird lokal auf dem HA-Host gebaut (dauert beim ersten Mal
+   einige Minuten).
+4. Starten und wie gewohnt öffnen.
+
+**Updates:** Ordner erneut kopieren, dann im Add-on Store **„Neu laden"** und anschließend
+**„Aktualisieren"** wählen — das Image wird neu gebaut. Die Daten in `/data` bleiben erhalten.
+
 ## Lokale Entwicklung
 
 ```bash
