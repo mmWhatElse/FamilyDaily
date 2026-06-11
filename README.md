@@ -7,24 +7,29 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 
 Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
+**Version 0.10.0**
+
 ## Funktionen
 
 | Modul | Was es kann |
 |---|---|
 | **Heute** | Tagesübersicht: Termine, fällige Aufgaben, Abendessen, Einkaufslisten-Badge |
-| **Kalender** | 14-Tage-Liste aus HA-Kalendern, Termin anlegen, löschen |
+| **Kalender** | 14-Tage-Liste aus HA-Kalendern, Termin anlegen, bearbeiten, löschen |
 | **Aufgaben** | Aufgaben mit Person, Fälligkeitsdatum, Wiederholung (täglich / wöchentlich / monatlich) |
 | **Essen** | Wochenplan Abendessen, letzte Woche übernehmen |
-| **Einstellungen** | Familienmitglieder verwalten, HA-Kalender pro Person zuordnen |
+| **Einstellungen** | Kalender auswählen & einfärben, Familienmitglieder, Benachrichtigungen |
 | **Einkaufen** | Mehrere Listen, Autovervollständigung, Live-Sync zwischen Geräten |
-| **Benachrichtigungen** | Push-Erinnerungen über HA Companion App — konfigurierbar in Einstellungen |
+| **Benachrichtigungen** | Push-Erinnerungen an mehrere Geräte über HA Companion App |
 
 ## Voraussetzungen
 
 - Home Assistant OS oder Supervised
-- Integration **Lokaler Kalender** in HA — ein Kalender pro Familienmitglied
-  (Einstellungen → Geräte & Dienste → Integration hinzufügen → „Lokaler Kalender")
-- In FamilyDaily unter **Einstellungen** jeden Kalender einer Person zuordnen
+- Mindestens ein Kalender in HA — z. B. die Integration **Lokaler Kalender**
+  (Einstellungen → Geräte & Dienste → Integration hinzufügen → „Lokaler Kalender").
+  Ein gemeinsamer Familienkalender reicht; mehrere Kalender (z. B. pro Person oder
+  „Arbeit"/„Schule") bekommen in FamilyDaily je eine eigene Farbe.
+- In FamilyDaily unter **Einstellungen** sind alle HA-Kalender automatisch aktiv —
+  dort lassen sich einzelne abschalten und Farben anpassen.
 
 ## Installation
 

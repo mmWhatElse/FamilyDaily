@@ -5,6 +5,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.10.0] — 2026-06-11
+
+### Neu
+- **Kalender-Auswahl:** Kalender sind von Personen entkoppelt. In den Einstellungen
+  erscheinen alle HA-Kalender mit eigenem Farbwähler und An/Aus-Schalter — nur aktive
+  Kalender werden in der App angezeigt und für Termin-Erinnerungen genutzt.
+  Bestehende Person↔Kalender-Zuordnungen werden automatisch übernommen.
+- **Termine bearbeiten:** Termin im Kalender antippen → Titel, Datum, Uhrzeit und
+  Ganztags-Option ändern (HA WebSocket `calendar/event/update`).
+- **Mehrere Notify-Services:** Benachrichtigungen gehen an beliebig viele Geräte
+  (Mehrfachauswahl statt Dropdown) — z. B. beide Handys.
+- **Desktop-Layout:** Ab 900 px Breite Seitenleiste statt Bottom-Tabs, Heute-Ansicht
+  als zweispaltiges Karten-Raster, breitere Inhalte.
+
+### Geändert
+- Frischeres Design: Gradient-Hero auf der Heute-Seite, Farbtupfer im Hintergrund,
+  Gradient-Buttons/-Badges, Icons in den Kartenüberschriften
+- Personen dienen jetzt nur noch der Aufgaben-Zuweisung (Kalender-Feld entfernt)
+- Termin-Erinnerungen ohne Personenbezug („Beginnt um 14:30 (in 30 Min.)")
+
+---
+
 ## [0.9.2] — 2026-06-11
 
 ### Behoben

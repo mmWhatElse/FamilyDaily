@@ -15,6 +15,8 @@
   --sh-up:       0 2px 8px rgba(0,0,0,0.09), 0 14px 36px rgba(0,0,0,0.08);
   --dur:         160ms;
   --ease:        cubic-bezier(0.4, 0, 0.2, 1);
+  --grad:        linear-gradient(135deg, #ff9d5c 0%, #e8743b 58%, #e0552e 100%);
+  --rail-w:      224px;
 }
 
 /* ─── Reset & base ───────────────────────────────────────────────────────── */
@@ -29,6 +31,16 @@ body {
   flex-direction: column;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Dezente Farbtupfer im Hintergrund */
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(420px 300px at 88% -60px, rgba(232,116,59,0.13), transparent 70%),
+    radial-gradient(380px 300px at -90px 32%, rgba(74,144,217,0.10), transparent 70%),
+    radial-gradient(320px 280px at 105% 78%, rgba(42,158,103,0.09), transparent 70%);
 }
 
 main {
@@ -97,20 +109,38 @@ h1 {
 /* legacy inline empty */
 .empty { color: var(--muted); text-align: center; padding: 32px 0; font-size: 0.9rem; }
 
-/* ─── Heute header ───────────────────────────────────────────────────────── */
-.heute-header { margin-bottom: 22px; }
+/* ─── Heute header (Hero) ────────────────────────────────────────────────── */
+.heute-header {
+  margin-bottom: 16px;
+  background: var(--grad);
+  border-radius: var(--radius);
+  padding: 24px 22px;
+  color: #fff;
+  box-shadow: 0 8px 26px rgba(232,116,59,0.30);
+  position: relative;
+  overflow: hidden;
+}
+.heute-header::before,
+.heute-header::after {
+  content: ""; position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,0.13);
+}
+.heute-header::after  { width: 150px; height: 150px; right: -36px; top: -52px; }
+.heute-header::before { width: 70px;  height: 70px;  right: 64px;  bottom: -30px; }
 .heute-header h1 {
   font-size: 1.8rem;
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 1.1;
+  position: relative; z-index: 1;
 }
 .date-pill {
   display: inline-flex; align-items: center;
-  background: var(--card); border-radius: 999px;
+  background: rgba(255,255,255,0.22); border-radius: 999px;
   padding: 5px 14px; font-size: 0.8rem; font-weight: 600;
-  color: var(--muted); box-shadow: var(--sh);
+  color: #fff;
   margin-top: 10px;
+  position: relative; z-index: 1;
 }
 
 /* ─── Week strip (Heute) ─────────────────────────────────────────────────── */
@@ -136,7 +166,7 @@ h1 {
 @media (hover: hover) { .week-day:hover { background: var(--accent-soft); } }
 .week-day:active { transform: scale(0.93); }
 .week-day.today {
-  background: var(--accent);
+  background: var(--grad);
   color: #fff;
   box-shadow: 0 2px 10px rgba(232,116,59,0.35);
 }
@@ -213,7 +243,7 @@ button:not(.check):not(.add):not(.del-btn):not(.btn-icon):not(.del):not(.back):a
 
 /* ─── Badge ──────────────────────────────────────────────────────────────── */
 .badge {
-  background: var(--accent); color: #fff;
+  background: var(--grad); color: #fff;
   border-radius: 999px; padding: 3px 10px; font-size: 0.76rem; font-weight: 700;
 }
 
@@ -313,12 +343,13 @@ ul.items li .del:active { color: var(--err); }
 /* ─── Buttons ────────────────────────────────────────────────────────────── */
 .btn-soft {
   width: 100%; padding: 15px; border: none; border-radius: 14px;
-  background: var(--accent); color: #fff;
+  background: var(--grad); color: #fff;
   font: inherit; font-size: 0.95rem; font-weight: 700;
   cursor: pointer;
-  transition: background 0.14s, transform 0.08s;
+  box-shadow: 0 3px 12px rgba(232,116,59,0.25);
+  transition: filter 0.14s, transform 0.08s;
 }
-.btn-soft:active { background: var(--accent-dark); transform: scale(0.98); }
+.btn-soft:active { filter: brightness(0.92); transform: scale(0.98); }
 
 .btn-ghost {
   width: 100%; padding: 13px; border: 1.5px dashed var(--line);
@@ -366,6 +397,11 @@ ul.items li .del:active { color: var(--err); }
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   border-left: 4px solid var(--pc, var(--accent));
   overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+@media (hover: hover) {
+  .cal-event:hover { box-shadow: var(--sh-up); transform: translateY(-1px); }
 }
 .cal-event-title {
   flex: 1; font-size: 0.88rem; font-weight: 600; min-width: 0;
@@ -558,6 +594,30 @@ input[type=color].form-input { padding: 6px; height: 48px; cursor: pointer; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ─── Kalender-Einstellungen ─────────────────────────────────────────────── */
+.cal-list { display: flex; flex-direction: column; }
+.cal-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.cal-row:last-child { border-bottom: none; }
+.cal-color {
+  width: 36px; height: 36px; border: none; border-radius: 11px;
+  padding: 0; background: none; cursor: pointer; flex-shrink: 0;
+}
+.cal-color::-webkit-color-swatch-wrapper { padding: 0; }
+.cal-color::-webkit-color-swatch { border: none; border-radius: 11px; }
+.cal-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cal-info strong { font-size: 0.92rem; }
+.cal-entity {
+  font-size: 0.72rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.svc-list { display: flex; flex-direction: column; }
+
+/* ─── Nav-Brand (nur Desktop sichtbar) ───────────────────────────────────── */
+nav.tabs .brand { display: none; }
+
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 360px) {
   nav.tabs button { padding: 10px 8px 4px; font-size: 0.61rem; }
@@ -570,4 +630,57 @@ input[type=color].form-input { padding: 6px; height: 48px; cursor: pointer; }
 }
 @media (max-height: 600px) {
   .modal-card { max-height: 96vh; }
+}
+
+/* ─── Desktop: Seitenleiste + breites Layout ─────────────────────────────── */
+@media (min-width: 900px) {
+  nav.tabs {
+    top: 0; bottom: 0; left: 0; right: auto;
+    width: var(--rail-w);
+    flex-direction: column; justify-content: flex-start; gap: 4px;
+    border-top: none; border-right: 1px solid var(--line);
+    padding: 24px 14px;
+  }
+  nav.tabs .brand {
+    display: block;
+    font-size: 1.3rem; font-weight: 900; letter-spacing: -0.02em;
+    padding: 2px 12px 20px;
+  }
+  nav.tabs .brand b {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  nav.tabs button {
+    flex-direction: row; justify-content: flex-start; gap: 12px;
+    width: 100%; font-size: 0.95rem; padding: 12px 16px;
+    border-radius: 14px; text-align: left;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  nav.tabs button .ico { font-size: 1.25rem; }
+  nav.tabs button::before { display: none; }
+  nav.tabs button.active { background: var(--accent-soft); }
+  nav.tabs button:not(.active):hover { background: var(--bg); color: var(--text); }
+
+  main {
+    /* im Bereich rechts der Sidebar zentrieren */
+    margin: 0 0 0 calc(var(--rail-w) + max(0px, (100vw - var(--rail-w) - 1000px) / 2));
+    max-width: 1000px;
+    padding: 44px 48px 64px;
+  }
+  main:not([data-view="heute"]) { max-width: 720px; }
+
+  /* Heute: zweispaltiges Karten-Raster */
+  main[data-view="heute"] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-content: start;
+  }
+  main[data-view="heute"] .heute-header,
+  main[data-view="heute"] .week-strip-card { grid-column: 1 / -1; }
+  main[data-view="heute"] .card { margin-bottom: 0; }
+  main[data-view="heute"] .heute-header { margin-bottom: 0; padding: 30px 28px; }
+  main[data-view="heute"] .heute-header h1 { font-size: 2.1rem; }
 }

@@ -70,13 +70,47 @@ CREATE TABLE IF NOT EXISTS notification_sent (
     key TEXT PRIMARY KEY,
     sent_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS calendar_settings (
+    entity_id TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    color TEXT NOT NULL DEFAULT '#e8743b'
+);
 """
+
+
+async def _migrate(db: aiosqlite.Connection) -> None:
+    # notification_settings: einzelner notify_service → JSON-Liste notify_services
+    cur = await db.execute("PRAGMA table_info(notification_settings)")
+    cols = [r[1] for r in await cur.fetchall()]
+    if "notify_services" not in cols:
+        await db.execute(
+            "ALTER TABLE notification_settings "
+            "ADD COLUMN notify_services TEXT NOT NULL DEFAULT '[]'"
+        )
+        await db.execute(
+            "UPDATE notification_settings SET notify_services = json_array(notify_service) "
+            "WHERE notify_service != ''"
+        )
+    # calendar_settings aus den alten Person↔Kalender-Zuordnungen befüllen
+    cur = await db.execute("SELECT COUNT(*) FROM calendar_settings")
+    (count,) = await cur.fetchone()
+    if count == 0:
+        cur = await db.execute(
+            "SELECT calendar_entity_id, color FROM person WHERE calendar_entity_id IS NOT NULL"
+        )
+        for entity_id, color in await cur.fetchall():
+            await db.execute(
+                "INSERT OR IGNORE INTO calendar_settings (entity_id, enabled, color) "
+                "VALUES (?, 1, ?)",
+                (entity_id, color),
+            )
 
 
 async def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
+        await _migrate(db)
         # Default list so the app is usable immediately
         cur = await db.execute("SELECT COUNT(*) FROM shopping_list")
         (count,) = await cur.fetchone()

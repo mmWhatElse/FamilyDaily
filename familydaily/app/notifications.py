@@ -1,6 +1,7 @@
 """Benachrichtigungen — HA notify-Integration mit Hintergrund-Scheduler."""
 
 import asyncio
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
@@ -16,9 +17,20 @@ log = logging.getLogger(__name__)
 
 class NotificationSettings(BaseModel):
     enabled: bool = False
-    notify_service: str = ""
+    notify_services: list[str] = []
     task_reminder_time: str = "08:00"   # HH:MM (local time)
     event_lead_minutes: int = 30
+
+
+def _row_services(row) -> list[str]:
+    """Service-Liste aus der Zeile; fällt aufs alte Einzelfeld zurück."""
+    try:
+        services = json.loads(row["notify_services"] or "[]")
+    except (ValueError, TypeError):
+        services = []
+    if not services and row["notify_service"]:
+        services = [row["notify_service"]]
+    return services
 
 
 # ─── API endpoints ────────────────────────────────────────────────────────────
@@ -31,7 +43,12 @@ async def get_settings():
         row = await cur.fetchone()
         if not row:
             return NotificationSettings().model_dump()
-        return {**dict(row), "enabled": bool(row["enabled"])}
+        return {
+            "enabled": bool(row["enabled"]),
+            "notify_services": _row_services(row),
+            "task_reminder_time": row["task_reminder_time"],
+            "event_lead_minutes": row["event_lead_minutes"],
+        }
     finally:
         await db.close()
 
@@ -42,14 +59,17 @@ async def put_settings(data: NotificationSettings):
     try:
         await db.execute(
             "INSERT INTO notification_settings "
-            "(id, enabled, notify_service, task_reminder_time, event_lead_minutes) "
-            "VALUES (1, ?, ?, ?, ?) "
+            "(id, enabled, notify_service, notify_services, task_reminder_time, event_lead_minutes) "
+            "VALUES (1, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET "
             "  enabled=excluded.enabled, "
             "  notify_service=excluded.notify_service, "
+            "  notify_services=excluded.notify_services, "
             "  task_reminder_time=excluded.task_reminder_time, "
             "  event_lead_minutes=excluded.event_lead_minutes",
-            (int(data.enabled), data.notify_service,
+            (int(data.enabled),
+             data.notify_services[0] if data.notify_services else "",
+             json.dumps(data.notify_services),
              data.task_reminder_time, data.event_lead_minutes),
         )
         await db.commit()
@@ -80,12 +100,13 @@ async def send_test():
         row = await cur.fetchone()
     finally:
         await db.close()
-    if not row or not row["notify_service"]:
+    services = _row_services(row) if row else []
+    if not services:
         raise HTTPException(400, "Kein Notify-Service konfiguriert")
     try:
-        await _send(row["notify_service"],
-                    title="FamilyDaily ✓",
-                    message="Testbenachrichtigung erfolgreich empfangen.")
+        await _send_all(services,
+                        title="FamilyDaily ✓",
+                        message="Testbenachrichtigung erfolgreich empfangen.")
     except (HAError, Exception) as exc:
         raise HTTPException(502, f"Benachrichtigung fehlgeschlagen: {exc}")
     return {"ok": True}
@@ -100,6 +121,19 @@ async def _send(service: str, *, title: str, message: str) -> None:
         raise HAError(f"Ungültiger Service-Name: {service!r}")
     domain, svc = parts
     await ha_post(f"/services/{domain}/{svc}", {"title": title, "message": message})
+
+
+async def _send_all(services: list[str], *, title: str, message: str) -> None:
+    """An alle konfigurierten Services senden; erst am Ende scheitern, falls alle scheitern."""
+    errors = []
+    for service in services:
+        try:
+            await _send(service, title=title, message=message)
+        except (HAError, Exception) as exc:
+            log.warning("Senden an %s fehlgeschlagen: %s", service, exc)
+            errors.append(exc)
+    if errors and len(errors) == len(services):
+        raise errors[0]
 
 
 async def _already_sent(db, key: str) -> bool:
@@ -143,8 +177,8 @@ async def _task_reminders(db, settings: dict) -> None:
     if count > 3:
         preview += f" (+{count - 3} weitere)"
 
-    await _send(
-        settings["notify_service"],
+    await _send_all(
+        settings["notify_services"],
         title=f"FamilyDaily — {count} Aufgabe{'n' if count != 1 else ''} heute",
         message=preview,
     )
@@ -157,18 +191,16 @@ async def _event_reminders(db, settings: dict) -> None:
     now_utc = datetime.now(timezone.utc)
     window_end = now_utc + timedelta(minutes=lead + 1)
 
-    cur = await db.execute(
-        "SELECT name, calendar_entity_id FROM person WHERE calendar_entity_id IS NOT NULL"
-    )
-    persons = {r["calendar_entity_id"]: r["name"] for r in await cur.fetchall()}
-    if not persons:
+    cur = await db.execute("SELECT entity_id FROM calendar_settings WHERE enabled = 1")
+    entities = [r["entity_id"] for r in await cur.fetchall()]
+    if not entities:
         return
 
     fmt = "%Y-%m-%dT%H:%M:%SZ"
     start_str = now_utc.strftime(fmt)
     end_str = window_end.strftime(fmt)
 
-    for entity_id, person_name in persons.items():
+    for entity_id in entities:
         try:
             events = await ha_get(
                 f"/calendars/{entity_id}",
@@ -200,10 +232,10 @@ async def _event_reminders(db, settings: dict) -> None:
 
             time_str = ev_dt.astimezone().strftime("%H:%M")
             summary = ev.get("summary", "Termin")
-            await _send(
-                settings["notify_service"],
+            await _send_all(
+                settings["notify_services"],
                 title=f"FamilyDaily — {summary}",
-                message=f"Beginnt um {time_str} (in {diff} Min.) · {person_name}",
+                message=f"Beginnt um {time_str} (in {diff} Min.)",
             )
             await _mark_sent(db, key)
 
@@ -216,9 +248,12 @@ async def check_and_send() -> None:
     try:
         cur = await db.execute("SELECT * FROM notification_settings WHERE id = 1")
         row = await cur.fetchone()
-        if not row or not row["enabled"] or not row["notify_service"]:
+        if not row or not row["enabled"]:
             return
-        settings = dict(row)
+        services = _row_services(row)
+        if not services:
+            return
+        settings = {**dict(row), "notify_services": services}
         await _task_reminders(db, settings)
         await _event_reminders(db, settings)
         # Purge dedup entries older than 3 days

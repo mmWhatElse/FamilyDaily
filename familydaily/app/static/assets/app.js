@@ -181,7 +181,7 @@ async function viewHeute() {
 
   // Calendar card content
   let calContent;
-  if (!cal || cal.error) {
+  if (!Array.isArray(cal)) {
     calContent = emptyState("📡", "Kalender nicht verbunden", "In Einstellungen Kalender zuordnen");
   } else if (cal.length === 0) {
     calContent = emptyState("🗓️", "Frei heute", "Keine Termine eingetragen");
@@ -192,7 +192,7 @@ async function viewHeute() {
         el("span", { class: "event-body" },
           el("span", { class: "event-title" }, ev.summary),
           el("span", { class: "event-meta" },
-            (ev.emoji ? ev.emoji + " " : "") + ev.person + (time ? " · " + time : "")
+            ev.calendar + (time ? " · " + time : "")
           )
         )
       );
@@ -226,15 +226,15 @@ async function viewHeute() {
       el("div", { class: "week-strip" }, ...weekDayNodes)
     ),
 
-    el("div", { class: "card" }, el("h2", {}, "Termine heute"), calContent),
-    el("div", { class: "card" }, el("h2", {}, "Aufgaben heute"), taskContent),
+    el("div", { class: "card" }, el("h2", {}, "🗓️ Termine heute"), calContent),
+    el("div", { class: "card" }, el("h2", {}, "✅ Aufgaben heute"), taskContent),
 
     // Abendessen — tappable if empty
     el("div", {
       class: "card" + (meal ? "" : " card-tap"),
       onclick: meal ? null : () => switchTab("essen"),
     },
-      el("h2", {}, "Abendessen"),
+      el("h2", {}, "🍽️ Abendessen"),
       meal
         ? el("p", { class: "status", style: "font-weight:600" },
             meal.url
@@ -247,7 +247,7 @@ async function viewHeute() {
     // Einkaufen — always tappable
     el("div", { class: "card card-tap", onclick: () => switchTab("listen") },
       el("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:12px" },
-        el("h2", { style: "margin:0" }, "Einkaufen"),
+        el("h2", { style: "margin:0" }, "🛒 Einkaufen"),
         el("span", { style: "color:var(--muted);font-size:1.1rem;line-height:1" }, "›")
       ),
       openTotal
@@ -273,13 +273,13 @@ async function viewKalender() {
   let events;
   try {
     events = await api.get(`api/calendar/events?start=${start}T00:00:00&end=${end}T23:59:59`);
-    if (events && events.error) throw new Error(events.error);
+    if (!Array.isArray(events)) throw new Error(events?.detail || events?.error || "Fehler");
   } catch (e) {
     setMain(
       el("h1", {}, "Kalender"),
       el("div", { class: "card" },
         emptyState("📡", "Kalender nicht verbunden",
-          "In Einstellungen die Kalender-Entitäten den Personen zuordnen.")
+          "HA-Verbindung prüfen — Kalender aktivierst du in den Einstellungen.")
       )
     );
     return;
@@ -302,7 +302,11 @@ async function viewKalender() {
 
     const evEls = dayEvs.map((ev) => {
       const time = fmtTime(ev.start);
-      return el("div", { class: "cal-event", style: `--pc:${ev.color}` },
+      return el("div", {
+        class: "cal-event",
+        style: `--pc:${ev.color}`,
+        onclick: () => openEventForm(ev),
+      },
         el("span", { class: "event-dot" }),
         el("span", { class: "cal-event-title" }, ev.summary),
         time ? el("span", { class: "cal-event-time" }, time) : null,
@@ -335,35 +339,50 @@ async function viewKalender() {
   );
 }
 
-function openEventForm() {
+function openEventForm(existing) {
+  const isEdit = !!existing;
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
 
-  const titleInput = el("input", { type: "text", placeholder: "Titel", class: "form-input", autocomplete: "off" });
-  const dateInput  = el("input", { type: "date", class: "form-input", value: isoDate() });
-  const timeStart  = el("input", { type: "time", class: "form-input", value: "09:00" });
-  const timeEnd    = el("input", { type: "time", class: "form-input", value: "10:00" });
+  const titleInput = el("input", { type: "text", placeholder: "Titel", class: "form-input",
+    value: existing?.summary || "", autocomplete: "off" });
+  const dateInput  = el("input", { type: "date", class: "form-input",
+    value: existing ? (existing.start || "").slice(0, 10) : isoDate() });
+  const timeStart  = el("input", { type: "time", class: "form-input",
+    value: existing && !existing.all_day ? fmtTime(existing.start) : "09:00" });
+  const timeEnd    = el("input", { type: "time", class: "form-input",
+    value: existing && !existing.all_day ? fmtTime(existing.end) : "10:00" });
   const allDayCb   = el("input", { type: "checkbox" });
+  allDayCb.checked = !!existing?.all_day;
   const calSel     = el("select", { class: "form-input" }, el("option", { value: "" }, "Lädt …"));
   const errMsg     = el("p", { class: "err", style: "display:none" });
 
-  api.get("api/persons").then((persons) => {
-    const opts = persons.filter((p) => p.calendar_entity_id).map((p) =>
-      el("option", { value: p.calendar_entity_id }, (p.emoji ? p.emoji + " " : "") + p.name)
-    );
+  api.get("api/calendar/calendars").then((cals) => {
+    const active = Array.isArray(cals) ? cals.filter((c) => c.enabled) : [];
+    const opts = active.map((c) => el("option", { value: c.entity_id }, c.name));
     calSel.replaceChildren(
-      el("option", { value: "" }, opts.length ? "— Person wählen —" : "Keine Kalender konfiguriert"),
+      el("option", { value: "" }, opts.length ? "— Kalender wählen —" : "Keine Kalender aktiviert"),
       ...opts
     );
+    if (active.length === 1 && !isEdit) calSel.value = active[0].entity_id;
+    if (isEdit) {
+      if (![...calSel.options].some((o) => o.value === existing.entity_id)) {
+        calSel.appendChild(el("option", { value: existing.entity_id }, existing.calendar || existing.entity_id));
+      }
+      calSel.value = existing.entity_id;
+      calSel.disabled = true; // Verschieben zwischen Kalendern unterstützt HA nicht
+    }
   });
 
-  allDayCb.addEventListener("change", () => {
+  function syncTimeVisibility() {
     timeStart.style.display = allDayCb.checked ? "none" : "";
     timeEnd.style.display   = allDayCb.checked ? "none" : "";
-  });
+  }
+  allDayCb.addEventListener("change", syncTimeVisibility);
+  syncTimeVisibility();
 
   overlay.appendChild(el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
-    el("h2", { style: "margin-bottom:14px" }, "Neuer Termin"),
+    el("h2", { style: "margin-bottom:14px" }, isEdit ? "Termin bearbeiten" : "Neuer Termin"),
     titleInput,
     dateInput,
     el("label", { class: "form-label" }, allDayCb, " Ganztägig"),
@@ -374,20 +393,29 @@ function openEventForm() {
         const title = titleInput.value.trim();
         const calId = calSel.value;
         if (!title) { errMsg.textContent = "Titel fehlt"; errMsg.style.display = ""; return; }
-        if (!calId) { errMsg.textContent = "Person / Kalender wählen"; errMsg.style.display = ""; return; }
+        if (!calId) { errMsg.textContent = "Kalender wählen"; errMsg.style.display = ""; return; }
         const allDay = allDayCb.checked;
         let evStart, evEnd;
         if (allDay) {
           evStart = dateInput.value;
-          const ed = new Date(dateInput.value + "T12:00:00"); ed.setDate(ed.getDate() + 1);
+          // Bei Mehrtagesterminen die Dauer beibehalten
+          let days = 1;
+          if (isEdit && existing.all_day && existing.start && existing.end) {
+            days = Math.max(1, Math.round(
+              (new Date(existing.end + "T12:00:00") - new Date(existing.start + "T12:00:00")) / 86400000));
+          }
+          const ed = new Date(dateInput.value + "T12:00:00"); ed.setDate(ed.getDate() + days);
           evEnd = isoDate(ed);
         } else {
           evStart = `${dateInput.value}T${timeStart.value}:00`;
           evEnd   = `${dateInput.value}T${timeEnd.value}:00`;
         }
-        const res = await api.post("api/calendar/events", {
-          entity_id: calId, summary: title, start: evStart, end: evEnd, all_day: allDay,
-        });
+        const body = { entity_id: calId, summary: title, start: evStart, end: evEnd, all_day: allDay };
+        const res = isEdit
+          ? await api.post("api/calendar/events/update", {
+              ...body, uid: existing.uid, recurrence_id: existing.recurrence_id || null,
+            })
+          : await api.post("api/calendar/events", body);
         if (res && (res.detail || res.error)) {
           errMsg.textContent = res.detail || res.error;
           errMsg.style.display = "";
@@ -711,29 +739,39 @@ function openMealForm(day, existing) {
 
 /* ---------- Einstellungen ---------- */
 
+function mkToggle(checked, onchange) {
+  const cb = Object.assign(document.createElement("input"), { type: "checkbox", checked });
+  cb.addEventListener("change", () => onchange(cb.checked));
+  const track = document.createElement("span");
+  track.className = "toggle-track";
+  const label = document.createElement("label");
+  label.className = "toggle";
+  label.append(cb, track);
+  return { el: label, input: cb };
+}
+
 async function viewEinstellungen() {
-  const [persons, haRaw, notifSettings, notifSvcRaw] = await Promise.all([
+  const [persons, calsRaw, notifSettings, notifSvcRaw] = await Promise.all([
     api.get("api/persons").catch(() => []),
-    api.get("api/persons/ha-calendars").catch(() => ({ error: "Nicht erreichbar" })),
+    api.get("api/calendar/calendars").catch(() => ({ error: "Nicht erreichbar" })),
     api.get("api/notifications/settings").catch(() => null),
     api.get("api/notifications/services").catch(() => ({ services: [] })),
   ]);
-  const haCalendars = Array.isArray(haRaw) ? haRaw : [];
-  const haError     = haRaw?.error;
-  const notifSvc    = notifSvcRaw?.services || [];
+  const calendars = Array.isArray(calsRaw) ? calsRaw : [];
+  const haError   = Array.isArray(calsRaw) ? null : (calsRaw?.detail || calsRaw?.error || "Nicht erreichbar");
+  const notifSvc  = notifSvcRaw?.services || [];
   const ns = notifSettings || {
-    enabled: false, notify_service: "", task_reminder_time: "08:00", event_lead_minutes: 30,
+    enabled: false, notify_services: [], task_reminder_time: "08:00", event_lead_minutes: 30,
   };
+  if (!Array.isArray(ns.notify_services)) ns.notify_services = [];
 
   function personCard(p) {
     return el("div", { class: "person-card" },
       el("span", { class: "person-avatar", style: `background:${p.color}` }, p.emoji || p.name[0]),
       el("div", { class: "person-info" },
-        el("strong", {}, p.name),
-        el("span", { class: "muted", style: "font-size:0.8rem" },
-          p.calendar_entity_id ? "📅 " + p.calendar_entity_id : "Kein Kalender")
+        el("strong", {}, p.name)
       ),
-      el("button", { class: "btn-icon", onclick: () => openPersonForm(p, haCalendars) }, "✎"),
+      el("button", { class: "btn-icon", onclick: () => openPersonForm(p) }, "✎"),
       el("button", {
         class: "btn-icon del",
         onclick: async () => {
@@ -745,29 +783,51 @@ async function viewEinstellungen() {
     );
   }
 
+  // ── Kalender-Karte ────────────────────────────────────────────────────────
+
+  function calendarRow(c) {
+    const colorInput = el("input", { type: "color", class: "cal-color", value: c.color,
+      onchange: (e) => api.patch(`api/calendar/calendars/${c.entity_id}`, { color: e.target.value }) });
+    const toggle = mkToggle(c.enabled, (on) =>
+      api.patch(`api/calendar/calendars/${c.entity_id}`, { enabled: on }));
+    return el("div", { class: "cal-row" },
+      colorInput,
+      el("div", { class: "cal-info" },
+        el("strong", {}, c.name),
+        el("span", { class: "muted cal-entity" }, c.entity_id)
+      ),
+      toggle.el
+    );
+  }
+
+  const calCard = el("div", { class: "card" },
+    el("h2", {}, "📅 Kalender"),
+    el("p", { class: "setting-hint", style: "margin-bottom:10px" },
+      "Welche HA-Kalender in der App angezeigt werden — mit eigener Farbe."),
+    calendars.length
+      ? el("div", { class: "cal-list" }, ...calendars.map(calendarRow))
+      : el("p", { class: "muted", style: "font-size:0.85rem" },
+          haError ? "Keine HA-Verbindung" : "Keine Kalender in HA gefunden — z. B. die Integration „Lokaler Kalender“ anlegen.")
+  );
+
   // ── Benachrichtigungen-Karte ──────────────────────────────────────────────
 
   const enabledCb = Object.assign(document.createElement("input"), {
     type: "checkbox", checked: ns.enabled,
   });
 
-  const serviceSelect = document.createElement("select");
-  serviceSelect.className = "form-input";
-  if (notifSvc.length === 0) {
-    serviceSelect.appendChild(
-      new Option(haError ? "Keine HA-Verbindung" : "Keine Notify-Services gefunden", "")
-    );
+  // Gespeicherte Services bleiben wählbar, auch wenn HA gerade offline ist
+  const allServices = [...new Set([...notifSvc, ...ns.notify_services])];
+  const svcWrap = el("div", { class: "svc-list" });
+  if (allServices.length === 0) {
+    svcWrap.appendChild(el("p", { class: "muted", style: "font-size:0.85rem" },
+      haError ? "Keine HA-Verbindung" : "Keine Notify-Services gefunden"));
   } else {
-    serviceSelect.appendChild(new Option("— Service wählen —", ""));
-    notifSvc.forEach((s) =>
-      serviceSelect.appendChild(new Option(s, s, false, s === ns.notify_service))
-    );
-  }
-  // Keep previously saved service visible even if HA is currently offline
-  if (ns.notify_service && !notifSvc.includes(ns.notify_service)) {
-    serviceSelect.appendChild(
-      new Option(ns.notify_service, ns.notify_service, false, true)
-    );
+    allServices.forEach((s) => {
+      const cb = el("input", { type: "checkbox", value: s });
+      cb.checked = ns.notify_services.includes(s);
+      svcWrap.appendChild(el("label", { class: "person-check-row" }, cb, " " + s));
+    });
   }
 
   const timeInput = Object.assign(document.createElement("input"), {
@@ -798,7 +858,7 @@ async function viewEinstellungen() {
   toggleEl.appendChild(toggleTrack);
 
   const notifCard = el("div", { class: "card" },
-    el("h2", {}, "Benachrichtigungen"),
+    el("h2", {}, "🔔 Benachrichtigungen"),
     el("div", { class: "setting-row" },
       el("div", {},
         el("div", { class: "setting-label" }, "Push-Erinnerungen"),
@@ -806,8 +866,8 @@ async function viewEinstellungen() {
       ),
       toggleEl
     ),
-    el("p", { class: "form-field-label", style: "margin-top:4px" }, "Notify-Service"),
-    serviceSelect,
+    el("p", { class: "form-field-label", style: "margin-top:4px" }, "Geräte (Notify-Services)"),
+    svcWrap,
     el("p", { class: "form-field-label", style: "margin-top:10px" }, "Aufgaben-Erinnerung um"),
     timeInput,
     el("p", { class: "form-field-label", style: "margin-top:10px" }, "Termin-Vorlaufzeit"),
@@ -825,7 +885,7 @@ async function viewEinstellungen() {
         setStatus("muted", "Speichern…");
         const r = await api.put("api/notifications/settings", {
           enabled: enabledCb.checked,
-          notify_service: serviceSelect.value,
+          notify_services: [...svcWrap.querySelectorAll("input:checked")].map((cb) => cb.value),
           task_reminder_time: timeInput.value,
           event_lead_minutes: parseInt(leadSelect.value, 10),
         }).catch(() => null);
@@ -838,22 +898,26 @@ async function viewEinstellungen() {
 
   setMain(
     el("h1", {}, "Einstellungen"),
-    el("p", { class: "subtitle" }, "Personen & Kalender"),
+    el("p", { class: "subtitle" }, "Kalender, Personen & Benachrichtigungen"),
 
     el("div", { class: "card" },
-      el("h2", {}, "Home Assistant"),
+      el("h2", {}, "🏠 Home Assistant"),
       haError
         ? el("p", { class: "err", style: "font-size:0.85rem" }, "Nicht verbunden: " + haError)
         : el("p", { class: "ok", style: "font-size:0.85rem" },
-            `✓ ${haCalendars.length} Kalender verfügbar`)
+            `✓ Verbunden · ${calendars.length} Kalender gefunden`)
     ),
 
+    calCard,
+
     el("div", { class: "card" },
-      el("h2", {}, "Familienmitglieder"),
+      el("h2", {}, "👨‍👩‍👧 Familienmitglieder"),
+      el("p", { class: "setting-hint", style: "margin-bottom:10px" },
+        "Für Aufgaben-Zuweisung — Farbe und Emoji erscheinen als Avatar."),
       persons.length
         ? el("div", { class: "person-list" }, ...persons.map(personCard))
         : el("p", { class: "muted", style: "margin-bottom:12px" }, "Noch keine Personen angelegt"),
-      el("button", { class: "btn-soft", onclick: () => openPersonForm(null, haCalendars) },
+      el("button", { class: "btn-soft", onclick: () => openPersonForm(null) },
         "+ Person hinzufügen")
     ),
 
@@ -861,7 +925,7 @@ async function viewEinstellungen() {
   );
 }
 
-function openPersonForm(existing, haCalendars) {
+function openPersonForm(existing) {
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
 
   const nameInput  = el("input", { type: "text", placeholder: "Name", class: "form-input",
@@ -870,11 +934,6 @@ function openPersonForm(existing, haCalendars) {
     value: existing?.emoji || "", maxlength: "2" });
   const colorInput = el("input", { type: "color", class: "form-input",
     value: existing?.color || "#4a90d9" });
-  const calSel = el("select", { class: "form-input" },
-    el("option", { value: "" }, "— Keinen —"),
-    ...haCalendars.map((c) => el("option", { value: c.entity_id }, c.name || c.entity_id))
-  );
-  if (existing?.calendar_entity_id) calSel.value = existing.calendar_entity_id;
 
   const errMsg = el("p", { class: "err", style: "display:none" });
 
@@ -885,8 +944,6 @@ function openPersonForm(existing, haCalendars) {
     emojiInput,
     el("p", { class: "form-field-label" }, "Farbe"),
     colorInput,
-    el("p", { class: "form-field-label" }, "HA-Kalender"),
-    calSel,
     errMsg,
     el("div", { class: "form-btns" },
       el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
@@ -897,7 +954,6 @@ function openPersonForm(existing, haCalendars) {
           name,
           emoji: emojiInput.value.trim() || null,
           color: colorInput.value,
-          calendar_entity_id: calSel.value || null,
         };
         if (existing) {
           await api.patch(`api/persons/${existing.id}`, payload);
@@ -940,6 +996,7 @@ function switchTab(tab) {
 }
 
 async function render() {
+  $main.dataset.view = state.tab; // für ansichts-spezifisches Desktop-Layout
   // Show spinner after 150 ms — fast responses won't flicker
   let loadTimer = setTimeout(showLoading, 150);
   try {
