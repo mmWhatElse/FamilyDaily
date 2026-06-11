@@ -3,7 +3,9 @@
 Selbst gehosteter Familien-Planer als Home-Assistant-Addon — Kalender, Aufgaben,
 Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung.
 
-**Version 0.9.0 (V1)**
+## Disclaimer
+
+Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
 ## Funktionen
 
