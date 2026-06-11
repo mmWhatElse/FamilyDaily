@@ -125,11 +125,16 @@ function connectWs() {
 async function viewHeute() {
   const today = isoDate();
   const tomorrow = isoDate(new Date(Date.now() + 86400000));
+  const mon = weekMonday();
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const weekStart = isoDate(mon);
+  const weekEnd = isoDate(sun);
 
-  const [lists, tasks, meals, cal] = await Promise.all([
+  const [lists, tasks, weekMeals, weekTasks, cal] = await Promise.all([
     api.get("api/shopping/lists").catch(() => []),
     api.get("api/tasks?view=today").catch(() => []),
-    api.get(`api/meals?start=${today}&end=${today}`).catch(() => []),
+    api.get(`api/meals?start=${weekStart}&end=${weekEnd}`).catch(() => []),
+    api.get("api/tasks").catch(() => []),
     api.get(`api/calendar/events?start=${today}T00:00:00&end=${tomorrow}T00:00:00`).catch(() => null),
   ]);
 
@@ -137,7 +142,42 @@ async function viewHeute() {
   const todayLabel = new Date().toLocaleDateString("de-DE", {
     weekday: "long", day: "numeric", month: "long",
   });
-  const meal = meals[0];
+
+  const weekMealMap = Object.fromEntries(weekMeals.map((m) => [m.date, m]));
+  const weekTaskMap = {};
+  weekTasks.forEach((t) => {
+    if (t.due_date && !t.done) {
+      (weekTaskMap[t.due_date] = weekTaskMap[t.due_date] || []).push(t);
+    }
+  });
+  const meal = weekMealMap[today];
+
+  // Week strip: Mon–Sun with meal/task dots
+  const weekDayNodes = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    const iso = isoDate(d);
+    const isToday = iso === today;
+    const isPast = iso < today;
+    const dayName = d.toLocaleDateString("de-DE", { weekday: "short" }).replace(/\.$/, "");
+
+    const dots = [];
+    if (weekMealMap[iso]) dots.push(el("span", { class: "week-dot meal" }));
+    (weekTaskMap[iso] || []).slice(0, 3).forEach(() =>
+      dots.push(el("span", { class: "week-dot task" }))
+    );
+
+    weekDayNodes.push(
+      el("div", {
+        class: "week-day" + (isToday ? " today" : "") + (isPast ? " past" : ""),
+        onclick: () => switchTab("kalender"),
+      },
+        el("span", { class: "week-day-name" }, dayName),
+        el("span", { class: "week-day-num" }, String(d.getDate())),
+        el("div", { class: "week-dots" }, ...dots)
+      )
+    );
+  }
 
   // Calendar card content
   let calContent;
@@ -179,6 +219,11 @@ async function viewHeute() {
     el("div", { class: "heute-header" },
       el("h1", {}, greeting()),
       el("div", { class: "date-pill" }, todayLabel)
+    ),
+
+    el("div", { class: "card week-strip-card" },
+      el("h2", {}, "Diese Woche"),
+      el("div", { class: "week-strip" }, ...weekDayNodes)
     ),
 
     el("div", { class: "card" }, el("h2", {}, "Termine heute"), calContent),
