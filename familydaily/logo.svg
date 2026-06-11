@@ -1,0 +1,24 @@
+<svg width="460" height="120" viewBox="0 0 460 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff9d5c"/>
+      <stop offset="100%" stop-color="#e0552e"/>
+    </linearGradient>
+  </defs>
+  <rect width="460" height="120" rx="20" fill="url(#g)"/>
+  <g transform="translate(15,15) scale(0.352)">
+    <rect x="161" y="74" width="16" height="46" rx="3" fill="white"/>
+    <polygon points="128,54 212,124 44,124" fill="white"/>
+    <rect x="67" y="120" width="122" height="92" fill="white"/>
+    <rect x="80" y="135" width="26" height="20" rx="3" fill="white" fill-opacity="0.35"/>
+    <rect x="150" y="135" width="26" height="20" rx="3" fill="white" fill-opacity="0.35"/>
+    <path d="M 108,212 L 108,178 A 20,20 0 0,1 148,178 L 148,212 Z" fill="white" fill-opacity="0.3"/>
+    <g transform="translate(128,193) scale(0.619) translate(-128,-177)">
+      <path d="M 128,195 C 128,195 107,182 107,170 C 107,162 114,156 121,159 C 124,160 126,163 128,165 C 130,163 132,160 135,159 C 142,156 149,162 149,170 C 149,182 128,195 128,195 Z" fill="white"/>
+    </g>
+  </g>
+  <text x="118" y="67" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif" font-size="44" fill="white">
+    <tspan font-weight="300">Family</tspan><tspan font-weight="700">Daily</tspan>
+  </text>
+  <text x="120" y="95" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif" font-size="14" font-weight="300" fill="white" fill-opacity="0.75">Planer für Home Assistant</text>
+</svg>
