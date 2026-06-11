@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
-## [Unreleased]
+## [0.9.1] — 2026-06-11
 
 ### Neu
 - **Benachrichtigungen:** Push-Erinnerungen über HA Companion App via `notify`-Services
@@ -16,7 +16,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 - **Heute-Tab:** Kompakter Wochenüberblick (Mo–So) mit Meal- und Aufgaben-Dots, heutige Spalte orange hervorgehoben
 
 ### Geändert
+- Addon-Version 0.9.0 → 0.9.1
 - `isoDate()` nutzt lokale Datumsteile statt UTC (behebt Off-by-One in UTC+1/+2)
+- UI-Overhaul: neue Design-Tokens, animierter Tab-Indikator, Slide-up-Modals, `.emptyState`-Komponente, Heute-Header mit Greeting + Date-Pill, Card-Tap-Feedback
 
 ---
 
