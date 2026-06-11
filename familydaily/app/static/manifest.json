@@ -1,0 +1,13 @@
+{
+  "name": "FamilyDaily",
+  "short_name": "FamilyDaily",
+  "description": "Familienkalender, Aufgaben, Einkaufslisten und Essensplan",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#e8743b",
+  "lang": "de",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -9,8 +9,12 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .calendar_api import router as calendar_router
 from .db import DB_PATH, init_db
+from .meals import router as meals_router
+from .persons import router as persons_router
 from .shopping import router as shopping_router
+from .tasks import router as tasks_router
 from .ws import broadcaster
 
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
@@ -25,6 +29,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FamilyDaily", lifespan=lifespan)
 app.include_router(shopping_router)
+app.include_router(tasks_router)
+app.include_router(persons_router)
+app.include_router(calendar_router)
+app.include_router(meals_router)
 
 
 @app.get("/api/health")
