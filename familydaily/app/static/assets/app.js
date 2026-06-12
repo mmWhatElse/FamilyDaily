@@ -39,9 +39,24 @@ function showLoading() {
   ));
 }
 
-function emptyState(icon, title, sub) {
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/* Inline-SVG aus dem Sprite in index.html (#i-<name>) */
+function icon(name, size = 18) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("width", size);
+  svg.setAttribute("height", size);
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+function emptyState(iconName, title, sub) {
   return el("div", { class: "empty-state" },
-    el("div", { class: "empty-icon" }, icon),
+    el("div", { class: "empty-icon" }, icon(iconName, 42)),
     el("p", { class: "empty-title" }, title),
     sub ? el("p", { class: "empty-sub" }, sub) : null
   );
@@ -49,11 +64,25 @@ function emptyState(icon, title, sub) {
 
 function greeting() {
   const h = new Date().getHours();
-  if (h < 5)  return "Gute Nacht 🌙";
-  if (h < 12) return "Guten Morgen ☀️";
-  if (h < 17) return "Hallo 👋";
-  if (h < 21) return "Guten Abend 🌅";
-  return "Gute Nacht 🌙";
+  if (h < 5)  return "Gute Nacht";
+  if (h < 12) return "Guten Morgen";
+  if (h < 17) return "Hallo";
+  if (h < 21) return "Guten Abend";
+  return "Gute Nacht";
+}
+
+/* ---------- Theme (hell/dunkel) ---------- */
+
+function syncThemeColor() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  document.querySelector("meta[name=theme-color]")
+    ?.setAttribute("content", dark ? "#251e12" : "#f8f1e2");
+}
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("fd_theme", t); } catch (e) { /* private mode */ }
+  syncThemeColor();
 }
 
 function el(tag, attrs = {}, ...children) {
@@ -124,24 +153,34 @@ function connectWs() {
 
 async function viewHeute() {
   const today = isoDate();
-  const tomorrow = isoDate(new Date(Date.now() + 86400000));
   const mon = weekMonday();
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const nextMon = new Date(mon); nextMon.setDate(mon.getDate() + 7);
   const weekStart = isoDate(mon);
   const weekEnd = isoDate(sun);
 
-  const [lists, tasks, weekMeals, weekTasks, cal] = await Promise.all([
+  const [lists, tasks, weekMeals, weekTasks, weekCal, persons] = await Promise.all([
     api.get("api/shopping/lists").catch(() => []),
     api.get("api/tasks?view=today").catch(() => []),
     api.get(`api/meals?start=${weekStart}&end=${weekEnd}`).catch(() => []),
     api.get("api/tasks").catch(() => []),
-    api.get(`api/calendar/events?start=${today}T00:00:00&end=${tomorrow}T00:00:00`).catch(() => null),
+    api.get(`api/calendar/events?start=${weekStart}T00:00:00&end=${isoDate(nextMon)}T00:00:00`).catch(() => null),
+    api.get("api/persons").catch(() => []),
   ]);
 
   const openTotal = lists.reduce((s, l) => s + l.open_count, 0);
   const todayLabel = new Date().toLocaleDateString("de-DE", {
     weekday: "long", day: "numeric", month: "long",
   });
+  const personMap = Object.fromEntries(persons.map((p) => [p.id, p]));
+
+  const calOk = Array.isArray(weekCal);
+  // Heutige Termine (inkl. mehrtägiger, die heute laufen — Ganztags-Ende ist exklusiv)
+  const cal = calOk ? weekCal.filter((ev) => {
+    const s = (ev.start || "").slice(0, 10);
+    const e = (ev.end || ev.start || "").slice(0, 10);
+    return s <= today && (ev.all_day ? today < e : today <= e);
+  }) : null;
 
   const weekMealMap = Object.fromEntries(weekMeals.map((m) => [m.date, m]));
   const weekTaskMap = {};
@@ -150,9 +189,15 @@ async function viewHeute() {
       (weekTaskMap[t.due_date] = weekTaskMap[t.due_date] || []).push(t);
     }
   });
+  // Termine pro Tag (gezählt am Starttag) für die Punkte im Wochenstreifen
+  const weekEvMap = {};
+  if (calOk) weekCal.forEach((ev) => {
+    const d = (ev.start || "").slice(0, 10);
+    if (d) (weekEvMap[d] = weekEvMap[d] || []).push(ev);
+  });
   const meal = weekMealMap[today];
 
-  // Week strip: Mon–Sun with meal/task dots
+  // Week strip: Mon–Sun with event/meal/task dots
   const weekDayNodes = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(mon); d.setDate(mon.getDate() + i);
@@ -162,6 +207,9 @@ async function viewHeute() {
     const dayName = d.toLocaleDateString("de-DE", { weekday: "short" }).replace(/\.$/, "");
 
     const dots = [];
+    (weekEvMap[iso] || []).slice(0, 3).forEach((ev) =>
+      dots.push(el("span", { class: "week-dot", style: ev.color ? `background:${ev.color}` : "" }))
+    );
     if (weekMealMap[iso]) dots.push(el("span", { class: "week-dot meal" }));
     (weekTaskMap[iso] || []).slice(0, 3).forEach(() =>
       dots.push(el("span", { class: "week-dot task" }))
@@ -174,89 +222,109 @@ async function viewHeute() {
       },
         el("span", { class: "week-day-name" }, dayName),
         el("span", { class: "week-day-num" }, String(d.getDate())),
-        el("div", { class: "week-dots" }, ...dots)
+        el("div", { class: "week-dots" }, ...dots.slice(0, 4))
       )
     );
   }
 
-  // Calendar card content
+  // Kopfzeile: Anzahl-Zusammenfassung
+  const subParts = [];
+  if (calOk) subParts.push(cal.length === 1 ? "1 Termin" : `${cal.length} Termine`);
+  const openToday = tasks.filter((t) => !t.done).length;
+  subParts.push(openToday === 1 ? "1 Aufgabe" : `${openToday} Aufgaben`);
+  subParts.push(meal ? "Essen steht fest" : "Essen noch offen");
+
+  // Termine-Inhalt
   let calContent;
-  if (!Array.isArray(cal)) {
-    calContent = emptyState("📡", "Kalender nicht verbunden", "In Einstellungen Kalender zuordnen");
+  if (!calOk) {
+    calContent = el("div", { class: "card" },
+      emptyState("wifi-off", "Kalender nicht verbunden", "In Einstellungen Kalender zuordnen"));
   } else if (cal.length === 0) {
-    calContent = emptyState("🗓️", "Frei heute", "Keine Termine eingetragen");
+    calContent = el("div", { class: "card" },
+      emptyState("calendar-check", "Frei heute", "Keine Termine eingetragen"));
   } else {
     calContent = el("ul", { class: "event-list" }, ...cal.map((ev) => {
       const time = fmtTime(ev.start);
       return el("li", { class: "event-item", style: `--pc:${ev.color}` },
         el("span", { class: "event-body" },
           el("span", { class: "event-title" }, ev.summary),
-          el("span", { class: "event-meta" },
-            ev.calendar + (time ? " · " + time : "")
-          )
-        )
+          el("span", { class: "event-meta" }, ev.calendar)
+        ),
+        time ? el("span", { class: "event-time" }, time) : null
       );
     }));
   }
 
-  // Tasks card content
+  // Aufgaben-Inhalt
   let taskContent;
   if (tasks.length === 0) {
-    taskContent = emptyState("✅", "Alles erledigt", "Keine offenen Aufgaben heute");
+    taskContent = el("div", { class: "card" },
+      emptyState("circle-check", "Alles erledigt", "Keine offenen Aufgaben heute"));
   } else {
-    taskContent = el("ul", { class: "task-list" }, ...tasks.map((t) =>
-      el("li", { class: "task-item" + (t.done ? " done" : "") },
+    taskContent = el("ul", { class: "task-list" }, ...tasks.map((t) => {
+      const pips = (t.person_ids || []).map((pid) => {
+        const p = personMap[pid];
+        return p ? el("span", { class: "person-pip", style: `background:${p.color}`, title: p.name },
+          p.emoji || p.name[0]) : null;
+      });
+      return el("li", { class: "task-item" + (t.done ? " done" : "") },
         el("button", {
           class: "check",
           onclick: () => api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render),
-        }, t.done ? "✓" : ""),
-        el("span", { class: "task-title" }, t.title)
-      )
-    ));
+        }, t.done ? icon("check", 14) : ""),
+        el("span", { class: "task-title", style: "flex:1" }, t.title),
+        ...pips
+      );
+    }));
   }
 
   setMain(
-    el("div", { class: "heute-header" },
-      el("h1", {}, greeting()),
-      el("div", { class: "date-pill" }, todayLabel)
+    el("header", { class: "heute-header" },
+      el("div", {},
+        el("h1", {}, todayLabel),
+        el("p", { class: "heute-sub" }, `${greeting()} — ${subParts.join(" · ")}`)
+      ),
+      persons.length
+        ? el("div", { class: "avatar-stack" }, ...persons.map((p) =>
+            el("span", { class: "magnet", style: `background:${p.color}`, title: p.name },
+              p.emoji || p.name[0])))
+        : null
     ),
 
     el("div", { class: "card week-strip-card" },
-      el("h2", {}, "Diese Woche"),
       el("div", { class: "week-strip" }, ...weekDayNodes)
     ),
 
-    el("div", { class: "card" }, el("h2", {}, "🗓️ Termine heute"), calContent),
-    el("div", { class: "card" }, el("h2", {}, "✅ Aufgaben heute"), taskContent),
-
-    // Abendessen — tappable if empty
-    el("div", {
-      class: "card" + (meal ? "" : " card-tap"),
-      onclick: meal ? null : () => switchTab("essen"),
-    },
-      el("h2", {}, "🍽️ Abendessen"),
-      meal
-        ? el("p", { class: "status", style: "font-weight:600" },
-            meal.url
-              ? el("a", { href: meal.url, target: "_blank", class: "meal-link" }, "🍽 " + meal.title)
-              : "🍽 " + meal.title
-          )
-        : el("p", { class: "muted", style: "font-size:0.9rem" }, "Noch nichts geplant — tippen zum Eintragen →")
+    el("section", { class: "pin-section" },
+      el("h2", { class: "pin-heading" }, "Heute ansteht"),
+      calContent
+    ),
+    el("section", { class: "pin-section" },
+      el("h2", { class: "pin-heading" }, "Noch zu tun"),
+      taskContent
     ),
 
-    // Einkaufen — always tappable
-    el("div", { class: "card card-tap", onclick: () => switchTab("listen") },
-      el("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:12px" },
-        el("h2", { style: "margin:0" }, "🛒 Einkaufen"),
-        el("span", { style: "color:var(--muted);font-size:1.1rem;line-height:1" }, "›")
+    el("div", { class: "pin-notes" },
+      // Abendessen-Haftnotiz — tippt sich zur Essens-Woche
+      el("div", { class: "sticky-note", onclick: () => switchTab("essen") },
+        el("span", { class: "note-label" }, "Heute auf dem Tisch"),
+        meal
+          ? el("span", { class: "note-title" }, meal.title)
+          : el("span", { class: "note-title note-title--empty" }, "Noch nichts geplant — antippen"),
+        meal?.url
+          ? el("a", { href: meal.url, target: "_blank", class: "note-link",
+              onclick: (e) => e.stopPropagation() }, icon("external-link", 12), "Rezept")
+          : null
       ),
-      openTotal
-        ? el("div", { style: "display:flex;align-items:center;gap:10px" },
-            el("span", { class: "badge", style: "font-size:0.9rem;padding:5px 14px" }, String(openTotal)),
-            el("span", { class: "muted", style: "font-size:0.88rem" },
-              `Artikel auf ${lists.filter((l) => l.open_count > 0).length === 1 ? "der Liste" : "den Listen"}`)
-          )
-        : el("p", { class: "muted", style: "font-size:0.9rem" }, "Alle Listen leer ✓")
+      // Einkaufs-Zettel
+      el("div", { class: "kraft-note", onclick: () => switchTab("listen") },
+        icon("shopping-cart", 18),
+        el("span", { class: "note-strong" }, "Einkaufen"),
+        el("span", { class: "note-sub" },
+          openTotal
+            ? (openTotal === 1 ? "1 Artikel offen" : `${openTotal} Artikel offen`)
+            : "Alles besorgt")
+      )
     )
   );
 }
@@ -282,7 +350,7 @@ async function viewKalender() {
     setMain(
       el("h1", {}, "Kalender"),
       el("div", { class: "card" },
-        emptyState("📡", "Kalender nicht verbunden",
+        emptyState("wifi-off", "Kalender nicht verbunden",
           "HA-Verbindung prüfen — Kalender aktivierst du in den Einstellungen.")
       )
     );
@@ -326,7 +394,7 @@ async function viewKalender() {
             await api.post("api/calendar/events/delete", { entity_id: ev.entity_id, uid: ev.uid });
             render();
           },
-        }, "✕")
+        }, icon("x", 15))
       );
     });
 
@@ -342,9 +410,9 @@ async function viewKalender() {
   const rangeLabel = `${base.toLocaleDateString("de-DE", { day: "numeric", month: "short" })} – ${lastDay.toLocaleDateString("de-DE", { day: "numeric", month: "short" })}`;
 
   const navRow = el("div", { class: "cal-nav" },
-    el("button", { class: "cal-nav-btn", onclick: () => { state.calOffset = (state.calOffset || 0) - 14; render(); } }, "‹"),
+    el("button", { class: "cal-nav-btn", onclick: () => { state.calOffset = (state.calOffset || 0) - 14; render(); } }, icon("chevron-left", 16)),
     el("button", { class: "cal-nav-date", onclick: () => openMonthPicker(base) }, rangeLabel),
-    el("button", { class: "cal-nav-btn", onclick: () => { state.calOffset = (state.calOffset || 0) + 14; render(); } }, "›"),
+    el("button", { class: "cal-nav-btn", onclick: () => { state.calOffset = (state.calOffset || 0) + 14; render(); } }, icon("chevron-right", 16)),
     state.calOffset ? el("button", { class: "cal-nav-today", onclick: () => { state.calOffset = 0; render(); } }, "Heute") : null
   );
 
@@ -352,7 +420,7 @@ async function viewKalender() {
     el("h1", {}, "Kalender"),
     navRow,
     el("button", { class: "btn-soft", style: "margin-bottom:16px", onclick: () => openEventForm(null, persons) },
-      "+ Neuer Termin"),
+      icon("plus", 16), "Neuer Termin"),
     ...dayEls
   );
 }
@@ -518,9 +586,9 @@ function openMonthPicker(activeBase) {
 
     pickerEl.replaceChildren(
       el("div", { class: "mp-head" },
-        el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month - 1, 1); refresh(); } }, "‹"),
+        el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month - 1, 1); refresh(); } }, icon("chevron-left", 15)),
         el("span", { class: "mp-label" }, monthLabel),
-        el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month + 1, 1); refresh(); } }, "›")
+        el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month + 1, 1); refresh(); } }, icon("chevron-right", 15))
       ),
       el("div", { class: "mp-grid" }, ...cells)
     );
@@ -547,7 +615,7 @@ async function viewAufgaben() {
         p.emoji || p.name[0]) : null;
     });
     const recurBadge = t.recurrence && t.recurrence !== "none"
-      ? el("span", { class: "recur-badge" }, "↻ " + RECUR_LABEL[t.recurrence]) : null;
+      ? el("span", { class: "recur-badge" }, icon("repeat", 11), RECUR_LABEL[t.recurrence]) : null;
     const dueLbl = t.due_date
       ? el("span", {
           class: "due-lbl" + (!t.done && t.due_date < isoDate() ? " overdue" : ""),
@@ -558,7 +626,7 @@ async function viewAufgaben() {
       el("button", {
         class: "check",
         onclick: () => api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render),
-      }, t.done ? "✓" : ""),
+      }, t.done ? icon("check", 14) : ""),
       el("div", { class: "task-body" },
         el("span", { class: "task-title" }, t.title),
         el("div", { class: "task-meta" }, ...pips, dueLbl, recurBadge)
@@ -574,19 +642,19 @@ async function viewAufgaben() {
           }
           render();
         },
-      }, "✕")
+      }, icon("x", 15))
     );
   }
 
   setMain(
     el("h1", {}, "Aufgaben"),
     el("button", { class: "btn-soft", style: "margin-bottom:16px",
-      onclick: () => openTaskForm(persons) }, "+ Neue Aufgabe"),
+      onclick: () => openTaskForm(persons) }, icon("plus", 16), "Neue Aufgabe"),
     fetchOk
       ? (open.length
           ? el("ul", { class: "task-list" }, ...open.map(taskRow))
-          : emptyState("🎉", "Alles erledigt!", "Keine offenen Aufgaben"))
-      : emptyState("📡", "Backend nicht erreichbar", "Bitte App neu laden"),
+          : emptyState("confetti", "Alles erledigt!", "Keine offenen Aufgaben"))
+      : emptyState("wifi-off", "Backend nicht erreichbar", "Bitte App neu laden"),
     done.length ? el("p", { class: "section-label" }, "Erledigt") : null,
     done.length ? el("ul", { class: "task-list" }, ...done.map(taskRow)) : null
   );
@@ -653,7 +721,7 @@ async function viewListen() {
   const lists = await api.get("api/shopping/lists").catch(() => []);
   const rows = lists.map((l) =>
     el("div", { class: "list-row", onclick: () => { state.listId = l.id; state.listName = l.name; render(); } },
-      el("span", { class: "ico" }, l.icon || "📝"),
+      el("span", { class: "ico" }, l.icon || icon("notes", 22)),
       el("span", { class: "name" }, l.name),
       l.open_count ? el("span", { class: "badge" }, String(l.open_count)) : null
     )
@@ -662,7 +730,7 @@ async function viewListen() {
     el("h1", {}, "Listen"),
     el("p", { class: "subtitle" }, "Einkaufs- und andere Listen"),
     ...rows,
-    el("button", { class: "btn-ghost", onclick: addList }, "+ Neue Liste")
+    el("button", { class: "btn-ghost", onclick: addList }, icon("plus", 15), "Neue Liste")
   );
 }
 
@@ -706,23 +774,23 @@ async function viewListDetail() {
       el("button", {
         class: "check",
         onclick: () => api.patch(`api/shopping/items/${i.id}`, { checked: !i.checked }).then(render),
-      }, i.checked ? "✓" : ""),
+      }, i.checked ? icon("check", 14) : ""),
       el("span", { class: "label" }, i.name),
       el("button", {
         class: "del",
         onclick: () => api.del(`api/shopping/items/${i.id}`).then(render),
-      }, "✕")
+      }, icon("x", 15))
     );
 
   setMain(
     el("div", { class: "topbar" },
-      el("button", { class: "back", onclick: () => { state.listId = null; render(); } }, "‹"),
+      el("button", { class: "back", onclick: () => { state.listId = null; render(); } }, icon("chevron-left", 24)),
       el("h1", {}, state.listName)
     ),
-    el("div", { class: "add-row" }, input, el("button", { class: "add", onclick: () => submit() }, "+"), sugBox),
+    el("div", { class: "add-row" }, input, el("button", { class: "add", onclick: () => submit() }, icon("plus", 20)), sugBox),
     open.length
       ? el("ul", { class: "items" }, ...open.map(itemLi))
-      : el("p", { class: "empty" }, "Nichts auf der Liste 🎉"),
+      : emptyState("basket", "Nichts auf der Liste", "Alles eingekauft"),
     done.length ? el("p", { class: "section-label" }, "Erledigt") : null,
     done.length ? el("ul", { class: "items" }, ...done.map(itemLi)) : null,
     done.length
@@ -768,7 +836,7 @@ async function viewEssen() {
             el("span", { class: "meal-title" }, meal.title),
             meal.url
               ? el("a", { href: meal.url, target: "_blank", class: "meal-ext",
-                  onclick: (e) => e.stopPropagation() }, "↗")
+                  onclick: (e) => e.stopPropagation() }, icon("external-link", 15))
               : null
           )
         : el("span", { class: "meal-empty" }, "+ Hinzufügen"),
@@ -776,7 +844,7 @@ async function viewEssen() {
         ? el("button", {
             class: "del-btn",
             onclick: async (e) => { e.stopPropagation(); await api.del(`api/meals/${day}`); render(); },
-          }, "✕")
+          }, icon("x", 15))
         : null
     ));
   }
@@ -791,7 +859,7 @@ async function viewEssen() {
         if (res.copied === 0) alert("Letzte Woche war leer oder diese Woche ist bereits vollständig.");
         render();
       }
-    }, "↩ Letzte Woche übernehmen")
+    }, icon("arrow-back-up", 15), "Letzte Woche übernehmen")
   );
 }
 
@@ -866,7 +934,7 @@ async function viewEinstellungen() {
       el("div", { class: "person-info" },
         el("strong", {}, p.name)
       ),
-      el("button", { class: "btn-icon", onclick: () => openPersonForm(p) }, "✎"),
+      el("button", { class: "btn-icon", onclick: () => openPersonForm(p) }, icon("pencil", 16)),
       el("button", {
         class: "btn-icon del",
         onclick: async () => {
@@ -874,7 +942,7 @@ async function viewEinstellungen() {
           await api.del(`api/persons/${p.id}`);
           render();
         },
-      }, "✕")
+      }, icon("x", 16))
     );
   }
 
@@ -896,7 +964,7 @@ async function viewEinstellungen() {
   }
 
   const calCard = el("div", { class: "card" },
-    el("h2", {}, "📅 Kalender"),
+    el("h2", {}, icon("calendar", 17), "Kalender"),
     el("p", { class: "setting-hint", style: "margin-bottom:10px" },
       "Welche HA-Kalender in der App angezeigt werden — mit eigener Farbe."),
     calendars.length
@@ -953,7 +1021,7 @@ async function viewEinstellungen() {
   toggleEl.appendChild(toggleTrack);
 
   const notifCard = el("div", { class: "card" },
-    el("h2", {}, "🔔 Benachrichtigungen"),
+    el("h2", {}, icon("bell", 17), "Benachrichtigungen"),
     el("div", { class: "setting-row" },
       el("div", {},
         el("div", { class: "setting-label" }, "Push-Erinnerungen"),
@@ -991,29 +1059,46 @@ async function viewEinstellungen() {
     )
   );
 
+  const themeToggle = mkToggle(
+    document.documentElement.dataset.theme === "dark",
+    (on) => applyTheme(on ? "dark" : "light")
+  );
+  const themeCard = el("div", { class: "card" },
+    el("h2", {}, icon("moon", 17), "Darstellung"),
+    el("div", { class: "setting-row", style: "padding-bottom:4px" },
+      el("div", {},
+        el("div", { class: "setting-label" }, "Dunkles Design"),
+        el("div", { class: "setting-hint" }, "Wird auf diesem Gerät gespeichert")
+      ),
+      themeToggle.el
+    )
+  );
+
   setMain(
     el("h1", {}, "Einstellungen"),
     el("p", { class: "subtitle" }, "Kalender, Personen & Benachrichtigungen"),
 
     el("div", { class: "card" },
-      el("h2", {}, "🏠 Home Assistant"),
+      el("h2", {}, icon("home", 17), "Home Assistant"),
       haError
         ? el("p", { class: "err", style: "font-size:0.85rem" }, "Nicht verbunden: " + haError)
         : el("p", { class: "ok", style: "font-size:0.85rem" },
             `✓ Verbunden · ${calendars.length} Kalender gefunden`)
     ),
 
+    themeCard,
+
     calCard,
 
     el("div", { class: "card" },
-      el("h2", {}, "👨‍👩‍👧 Familienmitglieder"),
+      el("h2", {}, icon("users", 17), "Familienmitglieder"),
       el("p", { class: "setting-hint", style: "margin-bottom:10px" },
         "Für Aufgaben-Zuweisung — Farbe und Emoji erscheinen als Avatar."),
       persons.length
         ? el("div", { class: "person-list" }, ...persons.map(personCard))
         : el("p", { class: "muted", style: "margin-bottom:12px" }, "Noch keine Personen angelegt"),
       el("button", { class: "btn-soft", onclick: () => openPersonForm(null) },
-        "+ Person hinzufügen")
+        icon("plus", 16), "Person hinzufügen")
     ),
 
     notifCard
@@ -1103,7 +1188,7 @@ async function render() {
       el("p", { class: "muted", style: "text-align:center;font-size:0.85rem;margin-top:6px" },
         "Backend nicht erreichbar?"),
       el("button", { class: "btn-soft", style: "margin-top:20px", onclick: render },
-        "↻ Erneut versuchen")
+        icon("refresh", 15), "Erneut versuchen")
     );
     console.error(e);
   } finally {
@@ -1114,5 +1199,6 @@ async function render() {
 document.querySelectorAll("nav.tabs button").forEach((b) =>
   b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
+syncThemeColor();
 connectWs();
 render();

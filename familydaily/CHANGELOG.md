@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.13.0] — 2026-06-12
+
+### Neu
+- **Komplettes UI-Redesign „Küchenpinnwand“**: warme Papier-Optik mit Terrakotta-Akzent, Zettel-Karten mit Klebestreifen, Haftnotiz für das Abendessen, Personen als Magnete im Heute-Kopf
+- **Dark Mode**: Schalter unter Einstellungen → Darstellung; folgt initial der Systemeinstellung, Wahl wird pro Gerät gespeichert
+- **Termin-Punkte im Wochenstreifen**: Tage mit Terminen zeigen jetzt farbige Punkte in der jeweiligen Kalenderfarbe (zusätzlich zu Essens- und Aufgaben-Punkten)
+- **Echte Icons statt Emojis**: Tabler-Icons als lokales SVG-Sprite (Navigation, Buttons, Leerzustände)
+- **Neue Schriften**: Baloo 2 (Überschriften) + Nunito (Text), lokal gebundled — kein CDN, funktioniert offline
+
+### Geändert
+- Heute-Ansicht neu aufgebaut: Datum + Familien-Magnete statt Gradient-Hero, Abschnitte „Heute ansteht“ / „Noch zu tun“, Essen & Einkaufen als Notizzettel
+- Termine auf „Heute“ zeigen die Uhrzeit jetzt rechts in der Karte
+
+---
+
 ## [0.12.1] — 2026-06-12
 
 ### Fix
