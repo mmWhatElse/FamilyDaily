@@ -1,5 +1,6 @@
+ARG BUILD_FROM
 ARG BUILD_VERSION
-FROM ghcr.io/home-assistant/base-python:3.12-alpine3.20
+FROM $BUILD_FROM
 
 LABEL \
   io.hass.version="${BUILD_VERSION}" \
