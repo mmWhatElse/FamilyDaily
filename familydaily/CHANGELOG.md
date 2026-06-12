@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.14.0] — 2026-06-12
+
+### Neu
+- **Zutaten beim Essensplan**: Gerichte können Zutaten haben (eine pro Zeile im Formular); beim erneuten Eintragen desselben Gerichts werden die Zutaten vom letzten Mal übernommen. Ein Tap auf den Korb-Button (Essensplan oder Heute-Haftnotiz) setzt alle Zutaten auf die Einkaufsliste — bereits vorhandene werden nicht doppelt angelegt
+- **Personen-Filter im Aufgaben-Tab**: Chips mit den Familienmitgliedern; antippen zeigt nur die Aufgaben der Person
+- **Einkaufslisten-Kategorien**: Artikel lassen sich Kategorien zuordnen (Tag am Artikel antippen); die Liste gruppiert dann in Supermarkt-Reihenfolge (Obst & Gemüse → … → Haushalt). Einmal zugeordnet, landen künftige Käufe desselben Artikels automatisch in der richtigen Kategorie
+- **Termine auf „Heute“ antippbar**: öffnet direkt das Termin-Formular zum Ansehen/Bearbeiten
+- **Schnell-Plus an beiden Heute-Abschnitten**: Termin bzw. Aufgabe direkt von der Heute-Ansicht anlegen
+
+### Geändert
+- Mehrtägige Termine zeigen ihre Punkte im Wochenstreifen jetzt an jedem Tag, nicht nur am Starttag
+
+---
+
 ## [0.13.0] — 2026-06-12
 
 ### Neu

@@ -108,9 +108,19 @@ async def add_item(list_id: int, data: ItemIn):
         existing = await cur.fetchone()
         if existing:
             return {"id": existing["id"], "name": name, "duplicate": True}
+        # Kategorie aus der Historie übernehmen, wenn keine mitgegeben wurde
+        category = data.category
+        if category is None:
+            cur = await db.execute(
+                "SELECT category FROM item_history WHERE name = ? COLLATE NOCASE",
+                (name,),
+            )
+            hist = await cur.fetchone()
+            if hist:
+                category = hist["category"]
         cur = await db.execute(
             "INSERT INTO shopping_item (list_id, name, category) VALUES (?, ?, ?)",
-            (list_id, name, data.category),
+            (list_id, name, category),
         )
         await db.execute(
             """INSERT INTO item_history (name, category, use_count) VALUES (?, ?, 1)
@@ -121,7 +131,7 @@ async def add_item(list_id: int, data: ItemIn):
         )
         await db.commit()
         await _notify(list_id)
-        return {"id": cur.lastrowid, "name": name, "category": data.category}
+        return {"id": cur.lastrowid, "name": name, "category": category}
     finally:
         await db.close()
 
@@ -142,10 +152,22 @@ async def patch_item(item_id: int, data: ItemPatch):
                 (data.name.strip(), item_id),
             )
         if data.category is not None:
+            category = data.category or None  # "" entfernt die Kategorie
             await db.execute(
                 "UPDATE shopping_item SET category = ? WHERE id = ?",
-                (data.category, item_id),
+                (category, item_id),
             )
+            # Zuordnung merken — künftige Käufe desselben Artikels landen direkt richtig
+            cur = await db.execute(
+                "SELECT name FROM shopping_item WHERE id = ?", (item_id,)
+            )
+            item = await cur.fetchone()
+            if item:
+                await db.execute(
+                    """INSERT INTO item_history (name, category, use_count) VALUES (?, ?, 1)
+                       ON CONFLICT(name) DO UPDATE SET category = excluded.category""",
+                    (item["name"], category),
+                )
         if data.checked is not None:
             checked_at = datetime.now(timezone.utc).isoformat() if data.checked else None
             await db.execute(

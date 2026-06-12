@@ -1,7 +1,7 @@
 /* FamilyDaily SPA — no build step, plain JS. */
 
 const $main = document.getElementById("view");
-const state = { tab: "heute", listId: null, listName: "", calOffset: 0 };
+const state = { tab: "heute", listId: null, listName: "", calOffset: 0, taskFilter: null };
 
 /* ---------- helpers ---------- */
 
@@ -128,6 +128,45 @@ function weekMonday() {
 const DAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const RECUR_LABEL = { daily: "täglich", weekly: "wöchentlich", monthly: "monatlich" };
 
+/* Einkaufs-Kategorien in Supermarkt-Reihenfolge */
+const CATEGORIES = [
+  "Obst & Gemüse", "Backwaren", "Fleisch & Fisch", "Kühlregal", "Tiefkühl",
+  "Vorräte", "Getränke", "Drogerie", "Haushalt", "Sonstiges",
+];
+
+function addDays(iso, n) {
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return isoDate(d);
+}
+
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const t = el("div", { class: "toast" }, msg);
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add("show"), 20);
+  setTimeout(() => {
+    t.classList.remove("show");
+    setTimeout(() => t.remove(), 300);
+  }, 2200);
+}
+
+/* Zutaten eines Gerichts auf die erste Einkaufsliste setzen (idempotent) */
+async function ingredientsToList(meal) {
+  const lists = await api.get("api/shopping/lists").catch(() => []);
+  if (!lists.length) { toast("Keine Einkaufsliste vorhanden"); return false; }
+  const target = lists[0];
+  let added = 0;
+  for (const name of meal.ingredients || []) {
+    const res = await api.post(`api/shopping/lists/${target.id}/items`, { name }).catch(() => null);
+    if (res && !res.duplicate) added++;
+  }
+  toast(added
+    ? `${added} Zutat${added === 1 ? "" : "en"} auf „${target.name}“ gesetzt`
+    : "Alles schon auf der Liste");
+  return true;
+}
+
 /* ---------- live updates ---------- */
 
 function connectWs() {
@@ -189,11 +228,19 @@ async function viewHeute() {
       (weekTaskMap[t.due_date] = weekTaskMap[t.due_date] || []).push(t);
     }
   });
-  // Termine pro Tag (gezählt am Starttag) für die Punkte im Wochenstreifen
+  // Termine pro Tag für die Punkte im Wochenstreifen — mehrtägige zählen an jedem Tag
   const weekEvMap = {};
   if (calOk) weekCal.forEach((ev) => {
-    const d = (ev.start || "").slice(0, 10);
-    if (d) (weekEvMap[d] = weekEvMap[d] || []).push(ev);
+    const s = (ev.start || "").slice(0, 10);
+    if (!s) return;
+    let last = (ev.end || s).slice(0, 10);
+    if (ev.all_day) last = addDays(last, -1); // Ganztags-Ende ist exklusiv
+    if (last < s) last = s;
+    let d = s < weekStart ? weekStart : s;
+    const stop = last > weekEnd ? weekEnd : last;
+    for (let guard = 0; d <= stop && guard < 7; d = addDays(d, 1), guard++) {
+      (weekEvMap[d] = weekEvMap[d] || []).push(ev);
+    }
   });
   const meal = weekMealMap[today];
 
@@ -245,7 +292,11 @@ async function viewHeute() {
   } else {
     calContent = el("ul", { class: "event-list" }, ...cal.map((ev) => {
       const time = fmtTime(ev.start);
-      return el("li", { class: "event-item", style: `--pc:${ev.color}` },
+      return el("li", {
+        class: "event-item",
+        style: `--pc:${ev.color}`,
+        onclick: () => openEventForm(ev, persons),
+      },
         el("span", { class: "event-body" },
           el("span", { class: "event-title" }, ev.summary),
           el("span", { class: "event-meta" }, ev.calendar)
@@ -296,11 +347,25 @@ async function viewHeute() {
     ),
 
     el("section", { class: "pin-section" },
-      el("h2", { class: "pin-heading" }, "Heute ansteht"),
+      el("div", { class: "pin-heading" },
+        el("h2", {}, "Heute ansteht"),
+        el("button", {
+          class: "pin-add",
+          "aria-label": "Neuen Termin anlegen",
+          onclick: () => openEventForm(null, persons),
+        }, icon("plus", 15))
+      ),
       calContent
     ),
     el("section", { class: "pin-section" },
-      el("h2", { class: "pin-heading" }, "Noch zu tun"),
+      el("div", { class: "pin-heading" },
+        el("h2", {}, "Noch zu tun"),
+        el("button", {
+          class: "pin-add",
+          "aria-label": "Neue Aufgabe anlegen",
+          onclick: () => openTaskForm(persons),
+        }, icon("plus", 15))
+      ),
       taskContent
     ),
 
@@ -311,9 +376,20 @@ async function viewHeute() {
         meal
           ? el("span", { class: "note-title" }, meal.title)
           : el("span", { class: "note-title note-title--empty" }, "Noch nichts geplant — antippen"),
-        meal?.url
-          ? el("a", { href: meal.url, target: "_blank", class: "note-link",
-              onclick: (e) => e.stopPropagation() }, icon("external-link", 12), "Rezept")
+        (meal?.url || meal?.ingredients?.length)
+          ? el("span", { class: "note-actions" },
+              meal.url
+                ? el("a", { href: meal.url, target: "_blank", class: "note-link",
+                    onclick: (e) => e.stopPropagation() }, icon("external-link", 12), "Rezept")
+                : null,
+              meal.ingredients?.length
+                ? el("button", { class: "note-link", onclick: async (e) => {
+                    e.stopPropagation();
+                    await ingredientsToList(meal);
+                    render();
+                  } }, icon("basket", 12), "Zutaten auf die Liste")
+                : null
+            )
           : null
       ),
       // Einkaufs-Zettel
@@ -605,8 +681,31 @@ async function viewAufgaben() {
     api.get("api/persons").catch(() => []),
   ]);
   const personMap = Object.fromEntries(persons.map((p) => [p.id, p]));
-  const open = tasks.filter((t) => !t.done);
-  const done = tasks.filter((t) => t.done);
+
+  // Personen-Filter: nur Aufgaben der gewählten Person
+  if (state.taskFilter != null && !personMap[state.taskFilter]) state.taskFilter = null;
+  const matchesFilter = (t) =>
+    state.taskFilter == null || (t.person_ids || []).includes(state.taskFilter);
+  const open = tasks.filter((t) => !t.done && matchesFilter(t));
+  const done = tasks.filter((t) => t.done && matchesFilter(t));
+
+  function chip(label, pid, color) {
+    const active = state.taskFilter === pid;
+    return el("button", {
+      class: "chip" + (active ? " active" : ""),
+      style: active && color ? `background:${color};border-color:${color}` : "",
+      onclick: () => { state.taskFilter = pid; render(); },
+    },
+      color ? el("span", { class: "chip-dot", style: `background:${active ? "#fff" : color}` }) : null,
+      label
+    );
+  }
+  const chipRow = persons.length
+    ? el("div", { class: "chip-row" },
+        chip("Alle", null, null),
+        ...persons.map((p) => chip(p.name, p.id, p.color)))
+    : null;
+  const filterName = state.taskFilter != null ? personMap[state.taskFilter]?.name : null;
 
   function taskRow(t) {
     const pips = (t.person_ids || []).map((pid) => {
@@ -650,10 +749,13 @@ async function viewAufgaben() {
     el("h1", {}, "Aufgaben"),
     el("button", { class: "btn-soft", style: "margin-bottom:16px",
       onclick: () => openTaskForm(persons) }, icon("plus", 16), "Neue Aufgabe"),
+    chipRow,
     fetchOk
       ? (open.length
           ? el("ul", { class: "task-list" }, ...open.map(taskRow))
-          : emptyState("confetti", "Alles erledigt!", "Keine offenen Aufgaben"))
+          : emptyState("confetti",
+              filterName ? `Nichts zu tun für ${filterName}` : "Alles erledigt!",
+              "Keine offenen Aufgaben"))
       : emptyState("wifi-off", "Backend nicht erreichbar", "Bitte App neu laden"),
     done.length ? el("p", { class: "section-label" }, "Erledigt") : null,
     done.length ? el("ul", { class: "task-list" }, ...done.map(taskRow)) : null
@@ -776,11 +878,41 @@ async function viewListDetail() {
         onclick: () => api.patch(`api/shopping/items/${i.id}`, { checked: !i.checked }).then(render),
       }, i.checked ? icon("check", 14) : ""),
       el("span", { class: "label" }, i.name),
+      i.checked ? null : el("button", {
+        class: "cat-tag",
+        title: "Kategorie wählen",
+        "aria-label": `Kategorie für ${i.name} wählen`,
+        onclick: () => openCategoryPicker(i),
+      }, i.category ? i.category : icon("tag", 12)),
       el("button", {
         class: "del",
         onclick: () => api.del(`api/shopping/items/${i.id}`).then(render),
       }, icon("x", 15))
     );
+
+  // Offene Artikel nach Kategorie gruppieren (Supermarkt-Reihenfolge);
+  // ohne vergebene Kategorien bleibt die Liste flach wie bisher.
+  const catIndex = (c) => {
+    const i = CATEGORIES.indexOf(c);
+    return i === -1 ? CATEGORIES.length - 0.5 : i;
+  };
+  let openContent;
+  if (!open.length) {
+    openContent = emptyState("basket", "Nichts auf der Liste", "Alles eingekauft");
+  } else if (!open.some((i) => i.category)) {
+    openContent = el("ul", { class: "items" }, ...open.map(itemLi));
+  } else {
+    const groups = {};
+    open.forEach((i) => {
+      const c = i.category || "Sonstiges";
+      (groups[c] = groups[c] || []).push(i);
+    });
+    const keys = Object.keys(groups).sort((a, b) => catIndex(a) - catIndex(b) || a.localeCompare(b));
+    openContent = el("div", {}, ...keys.flatMap((c) => [
+      el("p", { class: "section-label", style: "margin-top:12px" }, c),
+      el("ul", { class: "items" }, ...groups[c].map(itemLi)),
+    ]));
+  }
 
   setMain(
     el("div", { class: "topbar" },
@@ -788,9 +920,7 @@ async function viewListDetail() {
       el("h1", {}, state.listName)
     ),
     el("div", { class: "add-row" }, input, el("button", { class: "add", onclick: () => submit() }, icon("plus", 20)), sugBox),
-    open.length
-      ? el("ul", { class: "items" }, ...open.map(itemLi))
-      : emptyState("basket", "Nichts auf der Liste", "Alles eingekauft"),
+    openContent,
     done.length ? el("p", { class: "section-label" }, "Erledigt") : null,
     done.length ? el("ul", { class: "items" }, ...done.map(itemLi)) : null,
     done.length
@@ -800,6 +930,34 @@ async function viewListDetail() {
         }, "Erledigte löschen")
       : null
   );
+}
+
+function openCategoryPicker(item) {
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+
+  const row = (label, value) => {
+    const current = (item.category || null) === value;
+    return el("label", {
+      class: "person-check-row cat-row",
+      onclick: async () => {
+        await api.patch(`api/shopping/items/${item.id}`, { category: value ?? "" });
+        overlay.remove();
+        render();
+      },
+    },
+      el("span", { style: current ? "font-weight:800" : "" }, label),
+      current ? icon("check", 16) : null
+    );
+  };
+
+  overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
+    el("h2", { style: "margin-bottom:2px" }, item.name),
+    el("p", { class: "form-field-label", style: "margin-bottom:8px" }, "Kategorie"),
+    ...CATEGORIES.map((c) => row(c, c)),
+    row("Keine Kategorie", null)
+  ));
+  document.body.appendChild(overlay);
 }
 
 /* ---------- Essen ---------- */
@@ -834,6 +992,13 @@ async function viewEssen() {
       meal
         ? el("div", { class: "meal-content" },
             el("span", { class: "meal-title" }, meal.title),
+            meal.ingredients?.length
+              ? el("button", {
+                  class: "ing-btn",
+                  title: "Zutaten auf die Einkaufsliste setzen",
+                  onclick: async (e) => { e.stopPropagation(); await ingredientsToList(meal); },
+                }, icon("basket", 13), String(meal.ingredients.length))
+              : null,
             meal.url
               ? el("a", { href: meal.url, target: "_blank", class: "meal-ext",
                   onclick: (e) => e.stopPropagation() }, icon("external-link", 15))
@@ -874,13 +1039,31 @@ function openMealForm(day, existing) {
     value: existing?.note || "" });
   const urlInput   = el("input", { type: "url", placeholder: "Link (optional)", class: "form-input",
     value: existing?.url || "" });
+  const ingArea    = el("textarea", { class: "form-input", rows: "4",
+    placeholder: "Zutaten — eine pro Zeile (optional)" });
+  ingArea.value = (existing?.ingredients || []).join("\n");
+  const ingHint = el("p", { class: "setting-hint", style: "display:none" },
+    "Zutaten vom letzten Mal übernommen");
   const errMsg = el("p", { class: "err", style: "display:none" });
+
+  // Gespeicherte Zutaten desselben Gerichts wiederverwenden
+  titleInput.addEventListener("change", async () => {
+    const t = titleInput.value.trim();
+    if (!t || ingArea.value.trim()) return;
+    const r = await api.get(`api/meals/dish-ingredients?title=${encodeURIComponent(t)}`).catch(() => null);
+    if (r?.ingredients?.length) {
+      ingArea.value = r.ingredients.join("\n");
+      ingHint.style.display = "";
+    }
+  });
 
   overlay.appendChild(el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:4px" }, label),
     el("p", { class: "form-field-label", style: "margin-bottom:12px" }, "Abendessen"),
-    titleInput, noteInput, urlInput, errMsg,
+    titleInput, noteInput, urlInput,
+    el("p", { class: "form-field-label" }, "Zutaten"),
+    ingArea, ingHint, errMsg,
     el("div", { class: "form-btns" },
       el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
       el("button", { class: "btn-soft", onclick: async () => {
@@ -890,6 +1073,7 @@ function openMealForm(day, existing) {
           title,
           note: noteInput.value.trim() || null,
           url:  urlInput.value.trim() || null,
+          ingredients: ingArea.value.split("\n").map((s) => s.trim()).filter(Boolean),
         });
         overlay.remove();
         render();

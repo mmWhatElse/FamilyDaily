@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS meal (
     date TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
     note TEXT,
-    url TEXT
+    url TEXT,
+    ingredients TEXT
 );
 CREATE TABLE IF NOT EXISTS notification_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -91,6 +92,11 @@ async def _migrate(db: aiosqlite.Connection) -> None:
             "UPDATE notification_settings SET notify_services = json_array(notify_service) "
             "WHERE notify_service != ''"
         )
+    # meal: Zutaten als JSON-Liste
+    cur = await db.execute("PRAGMA table_info(meal)")
+    cols = [r[1] for r in await cur.fetchall()]
+    if "ingredients" not in cols:
+        await db.execute("ALTER TABLE meal ADD COLUMN ingredients TEXT")
     # calendar_settings aus den alten Person↔Kalender-Zuordnungen befüllen
     cur = await db.execute("SELECT COUNT(*) FROM calendar_settings")
     (count,) = await cur.fetchone()

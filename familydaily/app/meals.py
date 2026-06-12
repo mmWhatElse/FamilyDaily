@@ -1,5 +1,6 @@
 """Mahlzeiten — one dinner entry per day."""
 
+import json
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
@@ -15,6 +16,21 @@ class MealIn(BaseModel):
     title: str
     note: str | None = None
     url: str | None = None
+    ingredients: list[str] | None = None
+
+
+def _row_to_meal(r) -> dict:
+    m = dict(r)
+    try:
+        m["ingredients"] = json.loads(m.get("ingredients") or "[]")
+    except (TypeError, ValueError):
+        m["ingredients"] = []
+    return m
+
+
+def _clean_ingredients(items: list[str] | None) -> str | None:
+    cleaned = [s.strip() for s in (items or []) if s.strip()]
+    return json.dumps(cleaned, ensure_ascii=False) if cleaned else None
 
 
 @router.get("")
@@ -25,7 +41,31 @@ async def get_meals(start: str, end: str):
             "SELECT * FROM meal WHERE date >= ? AND date <= ? ORDER BY date",
             (start, end),
         )
-        return [dict(r) for r in await cur.fetchall()]
+        return [_row_to_meal(r) for r in await cur.fetchall()]
+    finally:
+        await db.close()
+
+
+@router.get("/dish-ingredients")
+async def dish_ingredients(title: str = ""):
+    """Zuletzt gespeicherte Zutaten für ein Gericht (zur Wiederverwendung)."""
+    title = title.strip()
+    if not title:
+        return {"ingredients": []}
+    db = await open_db()
+    try:
+        cur = await db.execute(
+            "SELECT ingredients FROM meal "
+            "WHERE title = ? COLLATE NOCASE AND ingredients IS NOT NULL "
+            "ORDER BY date DESC LIMIT 1",
+            (title,),
+        )
+        row = await cur.fetchone()
+        try:
+            ingredients = json.loads(row["ingredients"]) if row else []
+        except (TypeError, ValueError):
+            ingredients = []
+        return {"ingredients": ingredients}
     finally:
         await db.close()
 
@@ -38,10 +78,11 @@ async def set_meal(day: str, data: MealIn):
     db = await open_db()
     try:
         await db.execute(
-            """INSERT INTO meal (date, title, note, url) VALUES (?, ?, ?, ?)
+            """INSERT INTO meal (date, title, note, url, ingredients) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(date) DO UPDATE SET
-                 title = excluded.title, note = excluded.note, url = excluded.url""",
-            (day, title, data.note, data.url),
+                 title = excluded.title, note = excluded.note, url = excluded.url,
+                 ingredients = excluded.ingredients""",
+            (day, title, data.note, data.url, _clean_ingredients(data.ingredients)),
         )
         await db.commit()
         await broadcaster.broadcast({"type": "meals"})
@@ -79,8 +120,8 @@ async def copy_last_week():
             if await cur.fetchone():
                 continue
             await db.execute(
-                "INSERT INTO meal (date, title, note, url) VALUES (?, ?, ?, ?)",
-                (target.isoformat(), src["title"], src["note"], src["url"]),
+                "INSERT INTO meal (date, title, note, url, ingredients) VALUES (?, ?, ?, ?, ?)",
+                (target.isoformat(), src["title"], src["note"], src["url"], src["ingredients"]),
             )
             copied += 1
         await db.commit()
