@@ -6,19 +6,26 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 
 Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
-**Version 0.10.0**
+**Version 0.14.0**
 
 ## Funktionen
 
 | Modul | Was es kann |
 |---|---|
-| **Heute** | Tagesübersicht: Termine, fällige Aufgaben, Abendessen, Einkaufslisten-Badge |
-| **Kalender** | 14-Tage-Liste aus HA-Kalendern, Termin anlegen, bearbeiten, löschen |
-| **Aufgaben** | Aufgaben mit Person, Fälligkeitsdatum, Wiederholung (täglich / wöchentlich / monatlich) |
-| **Essen** | Wochenplan Abendessen, letzte Woche übernehmen |
-| **Einstellungen** | Kalender auswählen & einfärben, Familienmitglieder, Benachrichtigungen |
-| **Einkaufen** | Mehrere Listen, Autovervollständigung, Live-Sync zwischen Geräten |
+| **Heute** | Tagesübersicht: Wochenstreifen mit Termin-, Essens- und Aufgaben-Punkten pro Tag, Termine (antippbar), fällige Aufgaben, Abendessen als Haftnotiz, Einkaufs-Zettel — Termine und Aufgaben direkt von hier anlegen |
+| **Kalender** | 14-Tage-Liste aus HA-Kalendern mit Blätter-Navigation und Monatspicker; Termine anlegen, bearbeiten, löschen, Personen zuordnen |
+| **Aufgaben** | Aufgaben mit Person, Fälligkeitsdatum, Wiederholung (täglich / wöchentlich / monatlich); Personen-Filter über Chips („Was muss ich heute machen?") |
+| **Listen** | Mehrere Einkaufslisten, Autovervollständigung, Live-Sync zwischen Geräten; Kategorien mit Gruppierung in Supermarkt-Reihenfolge — einmal zugeordnet, landen Artikel künftig automatisch richtig |
+| **Essen** | Wochenplan Abendessen mit Zutaten pro Gericht: Zutaten vom letzten Mal werden übernommen, ein Tap setzt alles auf die Einkaufsliste; letzte Woche kopieren |
+| **Einstellungen** | Kalender auswählen & einfärben, Familienmitglieder, Benachrichtigungen, helles/dunkles Design |
 | **Benachrichtigungen** | Push-Erinnerungen an mehrere Geräte über HA Companion App |
+
+## Design
+
+Warmes „Küchenpinnwand"-Design: Papier-Optik mit Zettel-Karten, Klebestreifen und
+Haftnotizen, dazu ein vollwertiger **Dark Mode** (folgt der Systemeinstellung,
+umschaltbar unter *Mehr → Darstellung*). Schriften (Baloo 2 + Nunito) und Icons
+(Tabler) sind lokal gebundled — die App braucht auch fürs Aussehen kein Internet.
 
 ## Voraussetzungen
 
@@ -71,6 +78,6 @@ Funktionen außer dem Kalender sind voll nutzbar.
 ## Stack
 
 - **Backend:** Python / FastAPI + aiosqlite, WebSocket für Live-Updates
-- **Frontend:** Vanilla JS SPA (kein Build-Schritt), mobil-first CSS
-- **Datenbank:** SQLite in `/data` (überlebt Addon-Updates)
+- **Frontend:** Vanilla JS SPA (kein Build-Schritt), mobil-first CSS mit Hell/Dunkel-Themes, lokale Schriften & SVG-Icons
+- **Datenbank:** SQLite in `/data` (überlebt Addon-Updates, Migrationen laufen beim Start)
 - **Kalender:** HA-API via Supervisor-Token (`homeassistant_api: true`)
