@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.12.0] — 2026-06-12
+
+### Neu
+- **Listen-Tab in der Navigation**: Die Einkaufslisten sind jetzt direkt über die Navigationsleiste erreichbar (nicht mehr nur über die Heute-Karte)
+
+### Fix
+- **Dockerfile**: Migration auf explizites Base-Image (`ghcr.io/home-assistant/base-python:3.12-alpine3.20`) — `ARG BUILD_FROM` wird seit Supervisor 2026.04.0 nicht mehr übergeben
+- **Dockerfile**: Pflicht-Labels hinzugefügt (`io.hass.version`, `io.hass.type`, `io.hass.arch`)
+- **build.yaml**: Entfernt — seit Supervisor 2026.04.0 nicht mehr unterstützt; Base-Images stehen direkt im Dockerfile
+
+---
+
 ## [0.11.0] — 2026-06-11
 
 ### Neu

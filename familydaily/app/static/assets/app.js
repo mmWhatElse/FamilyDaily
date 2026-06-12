@@ -646,7 +646,7 @@ function openTaskForm(persons) {
   setTimeout(() => titleInput.focus(), 50);
 }
 
-/* ---------- Listen (no tab button — accessed via Heute card) ---------- */
+/* ---------- Listen ---------- */
 
 async function viewListen() {
   if (state.listId) return viewListDetail();
@@ -659,10 +659,7 @@ async function viewListen() {
     )
   );
   setMain(
-    el("div", { class: "topbar" },
-      el("button", { class: "back", onclick: () => switchTab("heute") }, "‹"),
-      el("h1", {}, "Listen")
-    ),
+    el("h1", {}, "Listen"),
     el("p", { class: "subtitle" }, "Einkaufs- und andere Listen"),
     ...rows,
     el("button", { class: "btn-ghost", onclick: addList }, "+ Neue Liste")

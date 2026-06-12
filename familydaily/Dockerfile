@@ -1,5 +1,10 @@
-ARG BUILD_FROM
-FROM $BUILD_FROM
+ARG BUILD_VERSION
+FROM ghcr.io/home-assistant/base-python:3.12-alpine3.20
+
+LABEL \
+  io.hass.version="${BUILD_VERSION}" \
+  io.hass.type="addon" \
+  io.hass.arch="aarch64|amd64|armv7"
 
 WORKDIR /app
 
