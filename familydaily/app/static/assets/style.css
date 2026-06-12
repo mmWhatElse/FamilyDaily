@@ -417,6 +417,73 @@ ul.items li .del:active { color: var(--err); }
 }
 .del-btn:active { color: var(--err); }
 
+/* ─── Kalender-Navigation & Monatspicker ────────────────────────────────── */
+.cal-nav {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+}
+.cal-nav-btn {
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 8px 14px; font-size: 1.1rem; cursor: pointer; color: var(--text);
+  flex-shrink: 0; line-height: 1; transition: background var(--dur);
+}
+.cal-nav-btn:hover { background: var(--accent-soft); }
+.cal-nav-date {
+  flex: 1; background: var(--card); border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 8px 14px; text-align: left; font-size: 0.88rem; font-weight: 600;
+  cursor: pointer; color: var(--text); transition: background var(--dur);
+}
+.cal-nav-date:hover { background: var(--accent-soft); }
+.cal-nav-today {
+  background: var(--accent-soft); border: none; border-radius: 12px;
+  padding: 8px 12px; font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; color: var(--accent); flex-shrink: 0;
+  transition: background var(--dur);
+}
+.cal-nav-today:hover { background: rgba(232,116,59,0.22); }
+
+.month-picker-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.35); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.month-picker {
+  background: var(--card); border-radius: var(--radius);
+  padding: 20px 18px 18px; width: 100%; max-width: 320px;
+  box-shadow: var(--sh-up);
+}
+.mp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.mp-label { font-weight: 700; font-size: 1rem; }
+.mp-nav {
+  background: var(--bg); border: none; border-radius: 10px;
+  padding: 6px 14px; font-size: 1.1rem; cursor: pointer; color: var(--text);
+  transition: background var(--dur);
+}
+.mp-nav:hover { background: var(--accent-soft); color: var(--accent); }
+.mp-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.mp-dow {
+  text-align: center; font-size: 0.7rem; font-weight: 700;
+  color: var(--muted); padding: 4px 0;
+}
+.mp-day {
+  text-align: center; padding: 8px 2px; font-size: 0.875rem;
+  border-radius: 8px; cursor: pointer;
+  transition: background var(--dur);
+}
+.mp-day:hover:not(.mp-other) { background: var(--accent-soft); color: var(--accent); }
+.mp-other { color: var(--line); cursor: default; }
+.mp-today { background: var(--accent); color: #fff; font-weight: 700; }
+.mp-today:hover { background: var(--accent-dark) !important; color: #fff !important; }
+.mp-range { background: rgba(232,116,59,0.14); color: var(--accent); font-weight: 600; }
+.mp-today.mp-range { background: var(--accent); color: #fff; }
+
+.person-pip--sm { width: 18px; height: 18px; font-size: 0.6rem; margin-left: 4px; flex-shrink: 0; }
+
 /* ─── Aufgaben ───────────────────────────────────────────────────────────── */
 .task-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .task-item {

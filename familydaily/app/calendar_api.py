@@ -3,8 +3,13 @@
 Welche Kalender die App nutzt (und in welcher Farbe), steht in calendar_settings —
 unabhängig von Personen. Neue HA-Kalender werden beim ersten Auflisten automatisch
 registriert und sind standardmäßig aktiv.
+
+Person-Tagging: Person-IDs werden als <!--fd-persons:1,2--> im HA-Beschreibungsfeld
+gespeichert. Das Tag ist in anderen HA-Clients unsichtbar (HTML-Kommentarsyntax) und
+wird beim Anzeigen in der App herausgefiltert.
 """
 
+import re
 from datetime import datetime
 
 import httpx
@@ -22,6 +27,25 @@ PALETTE = [
     "#e84393", "#f39c12", "#16a085", "#c0392b",
 ]
 
+FD_TAG_RE = re.compile(r"\s*<!--fd-persons:[\d,]*-->")
+
+
+def _parse_person_ids(description: str | None) -> list[int]:
+    if not description:
+        return []
+    m = re.search(r"<!--fd-persons:([\d,]+)-->", description)
+    if not m or not m.group(1):
+        return []
+    return [int(x) for x in m.group(1).split(",") if x.strip()]
+
+
+def _inject_person_ids(description: str | None, person_ids: list[int]) -> str | None:
+    clean = FD_TAG_RE.sub("", description or "").rstrip()
+    if not person_ids:
+        return clean or None
+    tag = f"<!--fd-persons:{','.join(str(i) for i in person_ids)}-->"
+    return (clean + "\n" + tag) if clean else tag
+
 
 class EventIn(BaseModel):
     entity_id: str
@@ -30,6 +54,7 @@ class EventIn(BaseModel):
     end: str
     all_day: bool = False
     description: str | None = None
+    person_ids: list[int] = []
 
 
 class EventUpdate(EventIn):
@@ -115,10 +140,12 @@ async def patch_calendar(entity_id: str, data: CalendarPatch):
 
 @router.get("/events")
 async def get_events(start: str, end: str):
-    """All events from the enabled calendars, colored per calendar."""
+    """All events from enabled calendars, colored per calendar, with person tags."""
     db = await open_db()
     try:
         calendars = await _merged_calendars(db)
+        cur = await db.execute("SELECT id, name, emoji, color FROM person")
+        person_map = {r["id"]: dict(r) for r in await cur.fetchall()}
     except (HAError, httpx.HTTPError) as exc:
         raise HTTPException(502, f"Home Assistant nicht erreichbar: {exc}")
     finally:
@@ -137,17 +164,21 @@ async def get_events(start: str, end: str):
         for ev in raw:
             ev_start = ev.get("start", {})
             ev_end = ev.get("end", {})
+            description = ev.get("description")
+            person_ids = _parse_person_ids(description)
+            visible_desc = FD_TAG_RE.sub("", description or "").rstrip() or None
             events.append({
                 "entity_id": c["entity_id"],
                 "uid": ev.get("uid"),
                 "recurrence_id": ev.get("recurrence_id"),
                 "summary": ev.get("summary", ""),
-                "description": ev.get("description"),
+                "description": visible_desc,
                 "start": ev_start.get("dateTime") or ev_start.get("date"),
                 "end": ev_end.get("dateTime") or ev_end.get("date"),
                 "all_day": "date" in ev_start,
                 "calendar": c["name"],
                 "color": c["color"],
+                "persons": [dict(person_map[pid]) for pid in person_ids if pid in person_map],
             })
     events.sort(key=lambda e: (e["start"] or "", e["summary"]))
     return events
@@ -164,8 +195,9 @@ def _aware_iso(value: str) -> str:
 @router.post("/events", status_code=201)
 async def create_event(data: EventIn):
     payload: dict = {"entity_id": data.entity_id, "summary": data.summary.strip()}
-    if data.description:
-        payload["description"] = data.description
+    desc = _inject_person_ids(data.description, data.person_ids)
+    if desc:
+        payload["description"] = desc
     if data.all_day:
         payload["start_date"] = data.start
         payload["end_date"] = data.end
@@ -190,8 +222,9 @@ async def update_event(data: EventUpdate):
     else:
         event["dtstart"] = _aware_iso(data.start)
         event["dtend"] = _aware_iso(data.end)
-    if data.description:
-        event["description"] = data.description
+    desc = _inject_person_ids(data.description, data.person_ids)
+    if desc:
+        event["description"] = desc
     payload: dict = {"entity_id": data.entity_id, "uid": data.uid, "event": event}
     if data.recurrence_id:
         payload["recurrence_id"] = data.recurrence_id
