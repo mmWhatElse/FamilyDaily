@@ -1,7 +1,7 @@
 /* FamilyDaily SPA — no build step, plain JS. */
 
 const $main = document.getElementById("view");
-const state = { tab: "heute", listId: null, listName: "" };
+const state = { tab: "heute", listId: null, listName: "", calOffset: 0 };
 
 /* ---------- helpers ---------- */
 
@@ -266,13 +266,17 @@ async function viewHeute() {
 async function viewKalender() {
   showLoading();
   const today = new Date();
-  const start = isoDate(today);
-  const endD = new Date(today); endD.setDate(today.getDate() + 14);
+  const base = new Date(today); base.setDate(today.getDate() + (state.calOffset || 0));
+  const endD = new Date(base); endD.setDate(base.getDate() + 14);
+  const start = isoDate(base);
   const end = isoDate(endD);
 
-  let events;
+  let events, persons;
   try {
-    events = await api.get(`api/calendar/events?start=${start}T00:00:00&end=${end}T23:59:59`);
+    [events, persons] = await Promise.all([
+      api.get(`api/calendar/events?start=${start}T00:00:00&end=${end}T23:59:59`),
+      api.get("api/persons").catch(() => []),
+    ]);
     if (!Array.isArray(events)) throw new Error(events?.detail || events?.error || "Fehler");
   } catch (e) {
     setMain(
@@ -294,21 +298,25 @@ async function viewKalender() {
 
   const dayEls = [];
   for (let i = 0; i < 14; i++) {
-    const d = new Date(today); d.setDate(today.getDate() + i);
+    const d = new Date(base); d.setDate(base.getDate() + i);
     const day = isoDate(d);
-    const isToday = i === 0;
+    const isToday = isoDate(d) === isoDate(today);
     const label = d.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "short" });
     const dayEvs = grouped[day] || [];
 
     const evEls = dayEvs.map((ev) => {
       const time = fmtTime(ev.start);
+      const pips = (ev.persons || []).map((p) =>
+        el("span", { class: "person-pip person-pip--sm", style: `background:${p.color}`, title: p.name },
+          p.emoji || p.name[0])
+      );
       return el("div", {
         class: "cal-event",
         style: `--pc:${ev.color}`,
-        onclick: () => openEventForm(ev),
+        onclick: () => openEventForm(ev, persons),
       },
-        el("span", { class: "event-dot" }),
         el("span", { class: "cal-event-title" }, ev.summary),
+        ...pips,
         time ? el("span", { class: "cal-event-time" }, time) : null,
         el("button", {
           class: "del-btn",
@@ -330,16 +338,26 @@ async function viewKalender() {
     );
   }
 
+  const lastDay = new Date(endD); lastDay.setDate(endD.getDate() - 1);
+  const rangeLabel = `${base.toLocaleDateString("de-DE", { day: "numeric", month: "short" })} – ${lastDay.toLocaleDateString("de-DE", { day: "numeric", month: "short" })}`;
+
+  const navRow = el("div", { class: "cal-nav" },
+    el("button", { class: "cal-nav-btn", onclick: () => { state.calOffset = (state.calOffset || 0) - 14; render(); } }, "‹"),
+    el("button", { class: "cal-nav-date", onclick: () => openMonthPicker(base) }, rangeLabel),
+    el("button", { class: "cal-nav-btn", onclick: () => { state.calOffset = (state.calOffset || 0) + 14; render(); } }, "›"),
+    state.calOffset ? el("button", { class: "cal-nav-today", onclick: () => { state.calOffset = 0; render(); } }, "Heute") : null
+  );
+
   setMain(
     el("h1", {}, "Kalender"),
-    el("p", { class: "subtitle" }, "Nächste 14 Tage"),
-    el("button", { class: "btn-soft", style: "margin-bottom:16px", onclick: () => openEventForm() },
+    navRow,
+    el("button", { class: "btn-soft", style: "margin-bottom:16px", onclick: () => openEventForm(null, persons) },
       "+ Neuer Termin"),
     ...dayEls
   );
 }
 
-function openEventForm(existing) {
+function openEventForm(existing, persons = []) {
   const isEdit = !!existing;
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
 
@@ -356,6 +374,17 @@ function openEventForm(existing) {
   const calSel     = el("select", { class: "form-input" }, el("option", { value: "" }, "Lädt …"));
   const errMsg     = el("p", { class: "err", style: "display:none" });
 
+  const existingPersonIds = new Set((existing?.persons || []).map((p) => p.id));
+  const personChecks = persons.map((p) => {
+    const cb = el("input", { type: "checkbox", "data-pid": String(p.id) });
+    cb.checked = existingPersonIds.has(p.id);
+    return el("label", { class: "person-check-row" },
+      cb,
+      el("span", { class: "person-pip", style: `background:${p.color}` }, p.emoji || p.name[0]),
+      el("span", {}, p.name)
+    );
+  });
+
   api.get("api/calendar/calendars").then((cals) => {
     const active = Array.isArray(cals) ? cals.filter((c) => c.enabled) : [];
     const opts = active.map((c) => el("option", { value: c.entity_id }, c.name));
@@ -369,7 +398,7 @@ function openEventForm(existing) {
         calSel.appendChild(el("option", { value: existing.entity_id }, existing.calendar || existing.entity_id));
       }
       calSel.value = existing.entity_id;
-      calSel.disabled = true; // Verschieben zwischen Kalendern unterstützt HA nicht
+      calSel.disabled = true;
     }
   });
 
@@ -380,13 +409,16 @@ function openEventForm(existing) {
   allDayCb.addEventListener("change", syncTimeVisibility);
   syncTimeVisibility();
 
-  overlay.appendChild(el("div", { class: "modal-card" },
+  const card = el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:14px" }, isEdit ? "Termin bearbeiten" : "Neuer Termin"),
     titleInput,
     dateInput,
     el("label", { class: "form-label" }, allDayCb, " Ganztägig"),
-    timeStart, timeEnd, calSel, errMsg,
+    timeStart, timeEnd, calSel,
+    persons.length ? el("p", { class: "form-field-label" }, "Personen") : null,
+    ...personChecks,
+    errMsg,
     el("div", { class: "form-btns" },
       el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
       el("button", { class: "btn-soft", onclick: async () => {
@@ -398,7 +430,6 @@ function openEventForm(existing) {
         let evStart, evEnd;
         if (allDay) {
           evStart = dateInput.value;
-          // Bei Mehrtagesterminen die Dauer beibehalten
           let days = 1;
           if (isEdit && existing.all_day && existing.start && existing.end) {
             days = Math.max(1, Math.round(
@@ -410,7 +441,14 @@ function openEventForm(existing) {
           evStart = `${dateInput.value}T${timeStart.value}:00`;
           evEnd   = `${dateInput.value}T${timeEnd.value}:00`;
         }
-        const body = { entity_id: calId, summary: title, start: evStart, end: evEnd, all_day: allDay };
+        const person_ids = [...card.querySelectorAll("input[data-pid]")]
+          .filter((cb) => cb.checked)
+          .map((cb) => Number(cb.dataset.pid));
+        const body = {
+          entity_id: calId, summary: title, start: evStart, end: evEnd, all_day: allDay,
+          description: existing?.description || null,
+          person_ids,
+        };
         const res = isEdit
           ? await api.post("api/calendar/events/update", {
               ...body, uid: existing.uid, recurrence_id: existing.recurrence_id || null,
@@ -425,9 +463,69 @@ function openEventForm(existing) {
         render();
       }}, "Speichern")
     )
-  ));
+  );
+  overlay.appendChild(card);
   document.body.appendChild(overlay);
   setTimeout(() => titleInput.focus(), 50);
+}
+
+function openMonthPicker(activeBase) {
+  document.querySelector(".month-picker-overlay")?.remove();
+  const today = new Date();
+  let pickerDate = new Date(activeBase.getFullYear(), activeBase.getMonth(), 1);
+
+  const overlay = el("div", { class: "month-picker-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const pickerEl = el("div", { class: "month-picker" });
+  overlay.appendChild(pickerEl);
+  document.body.appendChild(overlay);
+
+  function refresh() {
+    const year = pickerDate.getFullYear();
+    const month = pickerDate.getMonth();
+    const monthLabel = pickerDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    let startDow = firstDay.getDay(); // 0=Sun
+    startDow = startDow === 0 ? 6 : startDow - 1; // convert to Mon=0
+
+    const cells = [];
+    ["Mo","Di","Mi","Do","Fr","Sa","So"].forEach((d) =>
+      cells.push(el("span", { class: "mp-dow" }, d))
+    );
+    for (let i = 0; i < startDow; i++) cells.push(el("span", { class: "mp-day mp-other" }));
+
+    const activeStart = isoDate(activeBase);
+    const activeEndD = new Date(activeBase); activeEndD.setDate(activeBase.getDate() + 13);
+    const activeEnd = isoDate(activeEndD);
+
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const date = new Date(year, month, d);
+      const ds = isoDate(date);
+      const isToday = ds === isoDate(today);
+      const inRange = ds >= activeStart && ds <= activeEnd;
+      cells.push(el("span", {
+        class: "mp-day" + (isToday ? " mp-today" : "") + (inRange ? " mp-range" : ""),
+        onclick: () => {
+          const diff = Math.round((date.getTime() - new Date(isoDate(today) + "T00:00:00").getTime()) / 86400000);
+          state.calOffset = diff;
+          overlay.remove();
+          render();
+        },
+      }, String(d)));
+    }
+    const rem = (startDow + lastDay.getDate()) % 7;
+    if (rem > 0) for (let i = 0; i < (7 - rem); i++) cells.push(el("span", { class: "mp-day mp-other" }));
+
+    pickerEl.replaceChildren(
+      el("div", { class: "mp-head" },
+        el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month - 1, 1); refresh(); } }, "‹"),
+        el("span", { class: "mp-label" }, monthLabel),
+        el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month + 1, 1); refresh(); } }, "›")
+      ),
+      el("div", { class: "mp-grid" }, ...cells)
+    );
+  }
+  refresh();
 }
 
 /* ---------- Aufgaben ---------- */

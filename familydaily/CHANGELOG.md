@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.11.0] — 2026-06-11
+
+### Neu
+- **Kalender-Navigation**: ‹/›-Buttons springen 14 Tage vor/zurück; „Heute"-Button kehrt zur aktuellen Woche zurück
+- **Monatspicker**: Klick auf den Datums-Header öffnet einen Kalender-Monats-Grid zum schnellen Springen (inkl. Monatsnavigation ‹/›); aktiver Bereich wird farbig hervorgehoben
+- **Person-Tagging bei Terminen**: Termin anlegen/bearbeiten → Familienmitglied(er) auswählen → farbige Emoji-Pips erscheinen in der Terminliste; Daten werden unsichtbar im HA-Beschreibungsfeld gespeichert (`<!--fd-persons:1-->`)
+
+---
+
 ## [0.10.0] — 2026-06-11
 
 ### Neu
