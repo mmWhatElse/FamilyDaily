@@ -307,8 +307,20 @@ h1 {
   flex-shrink: 0;
   background: var(--accent);
 }
-.week-dot.meal { background: var(--meal-dot); }
+.week-dot.meal {
+  background: none;
+  border: 1.5px solid var(--meal-dot);
+  width: 6px; height: 6px;
+}
 .week-dot.task { background: var(--ok); }
+
+.week-legend {
+  display: flex; justify-content: center; gap: 16px;
+  margin-top: 10px; padding-top: 9px;
+  border-top: 1px dashed var(--line);
+  font-size: 0.62rem; font-weight: 700; color: var(--muted);
+}
+.week-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 
 /* ─── Haftnotiz + Packpapier (Heute unten) ──────────────────────────────── */
 .pin-notes {

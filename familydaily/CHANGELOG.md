@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.15.0] — 2026-06-12
+
+### Neu
+- **Termine in Personenfarben**: Sind Personen getaggt, färben sich Punkt und Markierung des Termins nach der Person — bei mehreren Personen als geteilter Farbkreis. Ohne Personen bleibt die Kalenderfarbe
+- **Wetter in der Begrüßung**: Die Heute-Ansicht zeigt Temperatur und Wetterlage aus der ersten HA-Wetter-Entität (z. B. „Guten Morgen · 18° sonnig")
+- **Legende unter dem Wochenstreifen**: Termine / Essen / Aufgaben sind jetzt unterscheidbar — der Essens-Punkt ist als Ring dargestellt
+
+### Geändert
+- Begrüßung feiner nach Tageszeit abgestuft („Mahlzeit" um die Mittagszeit statt „Hallo")
+- Abschnitt „Heute ansteht" heißt jetzt „Heute steht an"
+
+### Fix
+- Termine, die exakt um Mitternacht enden, erzeugen keinen Punkt mehr am Folgetag
+
+---
+
 ## [0.14.0] — 2026-06-12
 
 ### Neu

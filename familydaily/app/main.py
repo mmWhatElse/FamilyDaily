@@ -64,6 +64,41 @@ async def ha_status():
     return {"connected": True, "calendars": calendars}
 
 
+_weather_entity: str | None = None
+
+
+@app.get("/api/weather")
+async def weather():
+    """Aktuelles Wetter aus der ersten weather.*-Entität in HA (für die Heute-Begrüßung)."""
+    global _weather_entity
+    from .ha import ha_get
+
+    try:
+        state = None
+        if _weather_entity:
+            try:
+                state = await ha_get(f"/states/{_weather_entity}")
+            except Exception:
+                _weather_entity = None
+        if state is None:
+            states = await ha_get("/states")
+            state = next(
+                (s for s in states if s.get("entity_id", "").startswith("weather.")), None
+            )
+            if state:
+                _weather_entity = state["entity_id"]
+        if not state:
+            return {"available": False}
+        attrs = state.get("attributes", {})
+        return {
+            "available": True,
+            "condition": state.get("state"),
+            "temperature": attrs.get("temperature"),
+        }
+    except Exception:
+        return {"available": False}
+
+
 @app.websocket("/api/ws")
 async def websocket_endpoint(ws: WebSocket):
     await broadcaster.connect(ws)

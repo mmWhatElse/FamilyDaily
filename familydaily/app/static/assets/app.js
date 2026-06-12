@@ -65,10 +65,30 @@ function emptyState(iconName, title, sub) {
 function greeting() {
   const h = new Date().getHours();
   if (h < 5)  return "Gute Nacht";
-  if (h < 12) return "Guten Morgen";
-  if (h < 17) return "Hallo";
+  if (h < 10) return "Guten Morgen";
+  if (h < 12) return "Schönen Vormittag";
+  if (h < 14) return "Mahlzeit";
+  if (h < 17) return "Schönen Nachmittag";
   if (h < 21) return "Guten Abend";
   return "Gute Nacht";
+}
+
+const WEATHER_DE = {
+  "clear-night": "klar", cloudy: "bewölkt", fog: "neblig", hail: "Hagel",
+  lightning: "Gewitter", "lightning-rainy": "Gewitter", partlycloudy: "teils bewölkt",
+  pouring: "Starkregen", rainy: "regnerisch", snowy: "Schnee", "snowy-rainy": "Schneeregen",
+  sunny: "sonnig", windy: "windig", "windy-variant": "windig", exceptional: "Unwetter",
+};
+
+/* Akzentfarbe eines Termins: getaggte Personen vor Kalenderfarbe;
+   bei mehreren Personen ein Farb-Kreisdiagramm */
+function eventColor(ev) {
+  const cols = (ev.persons || []).map((p) => p.color).filter(Boolean);
+  if (cols.length === 0) return ev.color || "var(--accent)";
+  if (cols.length === 1) return cols[0];
+  const seg = 360 / cols.length;
+  const stops = cols.map((c, i) => `${c} ${i * seg}deg ${(i + 1) * seg}deg`).join(", ");
+  return `conic-gradient(${stops})`;
 }
 
 /* ---------- Theme (hell/dunkel) ---------- */
@@ -198,13 +218,14 @@ async function viewHeute() {
   const weekStart = isoDate(mon);
   const weekEnd = isoDate(sun);
 
-  const [lists, tasks, weekMeals, weekTasks, weekCal, persons] = await Promise.all([
+  const [lists, tasks, weekMeals, weekTasks, weekCal, persons, weather] = await Promise.all([
     api.get("api/shopping/lists").catch(() => []),
     api.get("api/tasks?view=today").catch(() => []),
     api.get(`api/meals?start=${weekStart}&end=${weekEnd}`).catch(() => []),
     api.get("api/tasks").catch(() => []),
     api.get(`api/calendar/events?start=${weekStart}T00:00:00&end=${isoDate(nextMon)}T00:00:00`).catch(() => null),
     api.get("api/persons").catch(() => []),
+    api.get("api/weather").catch(() => null),
   ]);
 
   const openTotal = lists.reduce((s, l) => s + l.open_count, 0);
@@ -235,6 +256,9 @@ async function viewHeute() {
     if (!s) return;
     let last = (ev.end || s).slice(0, 10);
     if (ev.all_day) last = addDays(last, -1); // Ganztags-Ende ist exklusiv
+    else if ((ev.end || "").slice(11, 16) === "00:00" && last > s) {
+      last = addDays(last, -1); // Ende exakt Mitternacht zählt nicht in den Folgetag
+    }
     if (last < s) last = s;
     let d = s < weekStart ? weekStart : s;
     const stop = last > weekEnd ? weekEnd : last;
@@ -255,7 +279,7 @@ async function viewHeute() {
 
     const dots = [];
     (weekEvMap[iso] || []).slice(0, 3).forEach((ev) =>
-      dots.push(el("span", { class: "week-dot", style: ev.color ? `background:${ev.color}` : "" }))
+      dots.push(el("span", { class: "week-dot", style: `background:${eventColor(ev)}` }))
     );
     if (weekMealMap[iso]) dots.push(el("span", { class: "week-dot meal" }));
     (weekTaskMap[iso] || []).slice(0, 3).forEach(() =>
@@ -274,7 +298,12 @@ async function viewHeute() {
     );
   }
 
-  // Kopfzeile: Anzahl-Zusammenfassung
+  // Kopfzeile: Begrüßung mit Wetter + Anzahl-Zusammenfassung
+  let hello = greeting();
+  if (weather?.available && weather.temperature != null) {
+    const cond = WEATHER_DE[weather.condition] || "";
+    hello += ` · ${Math.round(weather.temperature)}°${cond ? " " + cond : ""}`;
+  }
   const subParts = [];
   if (calOk) subParts.push(cal.length === 1 ? "1 Termin" : `${cal.length} Termine`);
   const openToday = tasks.filter((t) => !t.done).length;
@@ -294,7 +323,7 @@ async function viewHeute() {
       const time = fmtTime(ev.start);
       return el("li", {
         class: "event-item",
-        style: `--pc:${ev.color}`,
+        style: `--pc:${eventColor(ev)}`,
         onclick: () => openEventForm(ev, persons),
       },
         el("span", { class: "event-body" },
@@ -333,7 +362,7 @@ async function viewHeute() {
     el("header", { class: "heute-header" },
       el("div", {},
         el("h1", {}, todayLabel),
-        el("p", { class: "heute-sub" }, `${greeting()} — ${subParts.join(" · ")}`)
+        el("p", { class: "heute-sub" }, `${hello} — ${subParts.join(" · ")}`)
       ),
       persons.length
         ? el("div", { class: "avatar-stack" }, ...persons.map((p) =>
@@ -343,12 +372,17 @@ async function viewHeute() {
     ),
 
     el("div", { class: "card week-strip-card" },
-      el("div", { class: "week-strip" }, ...weekDayNodes)
+      el("div", { class: "week-strip" }, ...weekDayNodes),
+      el("div", { class: "week-legend" },
+        el("span", {}, el("span", { class: "week-dot", style: "background:var(--accent)" }), "Termine"),
+        el("span", {}, el("span", { class: "week-dot meal" }), "Essen"),
+        el("span", {}, el("span", { class: "week-dot task" }), "Aufgaben")
+      )
     ),
 
     el("section", { class: "pin-section" },
       el("div", { class: "pin-heading" },
-        el("h2", {}, "Heute ansteht"),
+        el("h2", {}, "Heute steht an"),
         el("button", {
           class: "pin-add",
           "aria-label": "Neuen Termin anlegen",
@@ -456,7 +490,7 @@ async function viewKalender() {
       );
       return el("div", {
         class: "cal-event",
-        style: `--pc:${ev.color}`,
+        style: `--pc:${eventColor(ev)}`,
         onclick: () => openEventForm(ev, persons),
       },
         el("span", { class: "cal-event-title" }, ev.summary),
