@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.15.1] — 2026-06-15
+
+### Fix
+- PWA-Icon auf dem iPhone Home Screen zeigte ein oranges Platzhalter-Quadrat — korrektes Haus-Logo (192×192 und 512×512) hinterlegt
+
+---
+
 ## [0.15.0] — 2026-06-12
 
 ### Neu
