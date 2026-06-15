@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.17.0] — 2026-06-15
+
+### Neu
+- **Mehrtägige Ganztagstermine**: Beim Anlegen/Bearbeiten eines Termins erscheint bei „Ganztägig“ ein zweites Datumsfeld „Bis“ — ideal für Urlaub, Ferien oder mehrtägige Ausflüge. Das Enddatum wird inklusiv eingegeben („von Mo bis Fr“); die Umrechnung auf das HA-interne Format passiert automatisch. Termine mit Uhrzeit bleiben unverändert eintägig
+
+---
+
 ## [0.16.0] — 2026-06-15
 
 ### Neu

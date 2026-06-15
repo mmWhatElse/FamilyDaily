@@ -620,12 +620,25 @@ function openEventForm(existing, persons = []) {
     value: existing?.summary || "", autocomplete: "off" });
   const dateInput  = el("input", { type: "date", class: "form-input",
     value: existing ? (existing.start || "").slice(0, 10) : isoDate() });
+  // Enddatum wird dem Nutzer inklusiv gezeigt; HA speichert exklusiv (= +1 Tag)
+  let endInitial;
+  if (existing?.all_day && existing.start && existing.end) {
+    endInitial = addDays((existing.end || "").slice(0, 10), -1);
+  } else {
+    endInitial = existing ? (existing.start || "").slice(0, 10) : isoDate();
+  }
+  const endDateInput = el("input", { type: "date", class: "form-input", value: endInitial });
   const timeStart  = el("input", { type: "time", class: "form-input",
     value: existing && !existing.all_day ? fmtTime(existing.start) : "09:00" });
   const timeEnd    = el("input", { type: "time", class: "form-input",
     value: existing && !existing.all_day ? fmtTime(existing.end) : "10:00" });
   const allDayCb   = el("input", { type: "checkbox" });
   allDayCb.checked = !!existing?.all_day;
+
+  const startLabel = el("p", { class: "form-field-label" }, "Datum");
+  const startField = el("div", {}, startLabel, dateInput);
+  const endLabel   = el("p", { class: "form-field-label" }, "Bis");
+  const endField   = el("div", {}, endLabel, endDateInput);
   const calSel     = el("select", { class: "form-input" }, el("option", { value: "" }, "Lädt …"));
   const errMsg     = el("p", { class: "err", style: "display:none" });
 
@@ -658,18 +671,26 @@ function openEventForm(existing, persons = []) {
   });
 
   function syncTimeVisibility() {
-    timeStart.style.display = allDayCb.checked ? "none" : "";
-    timeEnd.style.display   = allDayCb.checked ? "none" : "";
+    const allDay = allDayCb.checked;
+    timeStart.style.display = allDay ? "none" : "";
+    timeEnd.style.display   = allDay ? "none" : "";
+    endField.style.display  = allDay ? "" : "none";
+    startLabel.textContent  = allDay ? "Von" : "Datum";
+    // Enddatum nie vor Startdatum
+    if (allDay && endDateInput.value < dateInput.value) endDateInput.value = dateInput.value;
   }
   allDayCb.addEventListener("change", syncTimeVisibility);
+  dateInput.addEventListener("change", () => {
+    if (allDayCb.checked && endDateInput.value < dateInput.value) endDateInput.value = dateInput.value;
+  });
   syncTimeVisibility();
 
   const card = el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:14px" }, isEdit ? "Termin bearbeiten" : "Neuer Termin"),
     titleInput,
-    dateInput,
     el("label", { class: "form-label" }, allDayCb, " Ganztägig"),
+    startField, endField,
     timeStart, timeEnd, calSel,
     persons.length ? el("p", { class: "form-field-label" }, "Personen") : null,
     ...personChecks,
@@ -685,13 +706,13 @@ function openEventForm(existing, persons = []) {
         let evStart, evEnd;
         if (allDay) {
           evStart = dateInput.value;
-          let days = 1;
-          if (isEdit && existing.all_day && existing.start && existing.end) {
-            days = Math.max(1, Math.round(
-              (new Date(existing.end + "T12:00:00") - new Date(existing.start + "T12:00:00")) / 86400000));
+          if (endDateInput.value < evStart) {
+            errMsg.textContent = "Enddatum liegt vor dem Startdatum";
+            errMsg.style.display = "";
+            return;
           }
-          const ed = new Date(dateInput.value + "T12:00:00"); ed.setDate(ed.getDate() + days);
-          evEnd = isoDate(ed);
+          // UI-Enddatum ist inklusiv → HA erwartet exklusiv (+1 Tag)
+          evEnd = addDays(endDateInput.value, 1);
         } else {
           evStart = `${dateInput.value}T${timeStart.value}:00`;
           evEnd   = `${dateInput.value}T${timeEnd.value}:00`;
