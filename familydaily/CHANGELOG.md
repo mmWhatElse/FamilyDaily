@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.17.1] — 2026-06-15
+
+### Fix
+- **Mehrtägige Termine in der Kalender-Liste**: Ein mehrtägiger Ganztagstermin (z. B. Urlaub) wurde nur am Starttag angezeigt. Er erscheint jetzt an jedem Tag, den er umspannt — Folgetage dezent gestrichelt dargestellt
+
+---
+
 ## [0.17.0] — 2026-06-15
 
 ### Neu

@@ -544,11 +544,24 @@ async function viewKalender() {
     return;
   }
 
+  // Termine über alle Tage verteilen, die sie umspannen (mehrtägige zählen an jedem Tag)
+  const winStart = start;             // erster sichtbarer Tag
+  const winEnd = addDays(start, 13);  // letzter sichtbarer Tag (14-Tage-Fenster)
   const grouped = {};
   for (const ev of events) {
-    const day = (ev.start || "").slice(0, 10);
-    if (!grouped[day]) grouped[day] = [];
-    grouped[day].push(ev);
+    const s = (ev.start || "").slice(0, 10);
+    if (!s) continue;
+    let last = (ev.end || s).slice(0, 10);
+    if (ev.all_day) last = addDays(last, -1);  // Ganztags-Ende ist exklusiv
+    else if ((ev.end || "").slice(11, 16) === "00:00" && last > s) {
+      last = addDays(last, -1);                // Ende exakt Mitternacht zählt nicht in den Folgetag
+    }
+    if (last < s) last = s;
+    let d = s < winStart ? winStart : s;
+    const stop = last > winEnd ? winEnd : last;
+    for (let guard = 0; d <= stop && guard < 14; d = addDays(d, 1), guard++) {
+      (grouped[d] = grouped[d] || []).push(ev);
+    }
   }
 
   const dayEls = [];
@@ -560,13 +573,14 @@ async function viewKalender() {
     const dayEvs = grouped[day] || [];
 
     const evEls = dayEvs.map((ev) => {
-      const time = fmtTime(ev.start);
+      const isStart = (ev.start || "").slice(0, 10) === day;
+      const time = isStart ? fmtTime(ev.start) : "";
       const pips = (ev.persons || []).map((p) =>
         el("span", { class: "person-pip person-pip--sm", style: `background:${p.color}`, title: p.name },
           p.emoji || p.name[0])
       );
       return el("div", {
-        class: "cal-event",
+        class: "cal-event" + (isStart ? "" : " cal-event--cont"),
         style: `--pc:${eventColor(ev)}`,
         onclick: () => openEventForm(ev, persons),
       },
