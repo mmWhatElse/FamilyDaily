@@ -322,12 +322,79 @@ h1 {
 }
 .week-legend > span { display: inline-flex; align-items: center; gap: 5px; }
 
+/* ─── Countdown-Streifen (ganztägige Termine der nächsten 30 Tage) ──────── */
+.countdown-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.countdown-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px 5px 10px;
+  font-size: 0.78rem;
+}
+.countdown-days {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--accent);
+  line-height: 1;
+}
+.countdown-unit {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-right: 4px;
+}
+.countdown-title {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* ─── Mülltag-Banner ─────────────────────────────────────────────────────── */
+.muell-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--kraft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.muell-icon { font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
+.muell-text { display: flex; flex-direction: column; gap: 1px; }
+.muell-label {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent);
+}
+.muell-what { font-weight: 700; font-size: 0.95rem; }
+
 /* ─── Haftnotiz + Packpapier (Heute unten) ──────────────────────────────── */
 .pin-notes {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.pin-notes-row {
+  display: flex;
   gap: 12px;
   align-items: stretch;
-  margin-bottom: 18px;
 }
 .sticky-note {
   flex: 1.25;
@@ -350,11 +417,28 @@ h1 {
   transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 @media (hover: hover) {
-  .sticky-note:hover { transform: rotate(-1.2deg) translateY(-2px); box-shadow: var(--sh-up); }
+  .sticky-note:not(.sticky-note--memo):hover { transform: rotate(-1.2deg) translateY(-2px); box-shadow: var(--sh-up); }
   .kraft-note:hover  { transform: rotate(0.8deg) translateY(-2px);  box-shadow: var(--sh-up); }
 }
-.sticky-note:active { transform: rotate(-1.2deg) scale(0.98); }
+.sticky-note:not(.sticky-note--memo):active { transform: rotate(-1.2deg) scale(0.98); }
 .kraft-note:active  { transform: rotate(0.8deg) scale(0.98); }
+
+.sticky-note--memo { cursor: default; flex: none; width: 100%; transform: none; }
+.quick-note-ta {
+  width: 100%;
+  min-height: 72px;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--sticky-title);
+  line-height: 1.5;
+  padding: 0;
+  margin-top: 4px;
+  field-sizing: content;
+}
 
 .note-label {
   display: block;
@@ -997,6 +1081,8 @@ nav.tabs .brand { display: none; }
   }
   main[data-view="heute"] .heute-header,
   main[data-view="heute"] .week-strip-card,
+  main[data-view="heute"] .countdown-strip,
+  main[data-view="heute"] .muell-banner,
   main[data-view="heute"] .pin-notes { grid-column: 1 / -1; }
   main[data-view="heute"] .card,
   main[data-view="heute"] .pin-section,

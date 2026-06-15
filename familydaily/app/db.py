@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS calendar_settings (
     enabled INTEGER NOT NULL DEFAULT 1,
     color TEXT NOT NULL DEFAULT '#e8743b'
 );
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
 """
 
 

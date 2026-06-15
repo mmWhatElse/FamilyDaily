@@ -99,6 +99,45 @@ async def weather():
         return {"available": False}
 
 
+@app.get("/api/settings")
+async def get_app_settings():
+    from .db import open_db
+    db = await open_db()
+    try:
+        cur = await db.execute("SELECT key, value FROM app_settings")
+        rows = await cur.fetchall()
+        return {r["key"]: r["value"] for r in rows}
+    finally:
+        await db.close()
+
+
+@app.patch("/api/settings")
+async def patch_app_settings(data: dict):
+    from .db import open_db
+    db = await open_db()
+    try:
+        for key, value in data.items():
+            await db.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, str(value)),
+            )
+        await db.commit()
+        return {"ok": True}
+    finally:
+        await db.close()
+
+
+@app.get("/api/ha/entity")
+async def ha_entity_state(entity_id: str):
+    from .ha import ha_get
+    try:
+        state = await ha_get(f"/states/{entity_id}")
+        return {"available": True, "state": state["state"]}
+    except Exception:
+        return {"available": False}
+
+
 @app.websocket("/api/ws")
 async def websocket_endpoint(ws: WebSocket):
     await broadcaster.connect(ws)

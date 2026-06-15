@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.16.0] — 2026-06-15
+
+### Neu
+- **Schnellnotiz auf Heute**: Frei beschreibbarer Haftzettel auf der Pinnwand — wird automatisch gespeichert und bleibt beim nächsten Öffnen erhalten
+- **Countdown-Magnete**: Ganztägige Kalendertermine der nächsten 30 Tage erscheinen als Pillen unterhalb der Kopfzeile ("8 Tage · Geburtstag Max") — automatisch aus allen aktiven Kalendern
+- **Mülltag-Banner**: HA-Entity (`sensor.nachste_abholung` o. ä.) in den Einstellungen hinterlegen; zeigt auf Heute einen Banner wenn heute oder morgen Abholung ist
+
+### Geändert
+- Haftnotiz-Bereich auf Heute zweigliedrig: oben [Essen | Einkaufen], darunter vollbreite Schnellnotiz
+
+---
+
 ## [0.15.1] — 2026-06-15
 
 ### Fix

@@ -218,7 +218,10 @@ async function viewHeute() {
   const weekStart = isoDate(mon);
   const weekEnd = isoDate(sun);
 
-  const [lists, tasks, weekMeals, weekTasks, weekCal, persons, weather] = await Promise.all([
+  const day30 = addDays(today, 30);
+  const tomorrow = addDays(today, 1);
+
+  const [lists, tasks, weekMeals, weekTasks, weekCal, persons, weather, appSettings, countdownRaw] = await Promise.all([
     api.get("api/shopping/lists").catch(() => []),
     api.get("api/tasks?view=today").catch(() => []),
     api.get(`api/meals?start=${weekStart}&end=${weekEnd}`).catch(() => []),
@@ -226,7 +229,38 @@ async function viewHeute() {
     api.get(`api/calendar/events?start=${weekStart}T00:00:00&end=${isoDate(nextMon)}T00:00:00`).catch(() => null),
     api.get("api/persons").catch(() => []),
     api.get("api/weather").catch(() => null),
+    api.get("api/settings").catch(() => ({})),
+    api.get(`api/calendar/events?start=${tomorrow}T00:00:00&end=${day30}T00:00:00`).catch(() => null),
   ]);
+
+  // Mülltag: entity state nur laden wenn konfiguriert
+  const muellEntityId = appSettings?.muell_entity || "";
+  let muellInfo = null;
+  if (muellEntityId) {
+    const md = await api.get(`api/ha/entity?entity_id=${encodeURIComponent(muellEntityId)}`).catch(() => null);
+    if (md?.available) {
+      const m = md.state.match(/^(.+?)\s+in\s+(\d+)\s+tag/i);
+      if (m) {
+        const days = parseInt(m[2], 10);
+        if (days <= 1) muellInfo = { what: m[1], days };
+      }
+    }
+  }
+
+  // Countdown: ganztägige Termine in den nächsten 30 Tagen
+  const quickNote = appSettings?.quick_note || "";
+  const countdownEvents = Array.isArray(countdownRaw)
+    ? countdownRaw
+        .filter((ev) => ev.all_day && (ev.start || "").slice(0, 10) > today)
+        .sort((a, b) => (a.start || "").localeCompare(b.start || ""))
+        .slice(0, 3)
+        .map((ev) => {
+          const days = Math.round(
+            (new Date(ev.start.slice(0, 10) + "T12:00:00") - new Date(today + "T12:00:00")) / 86400000
+          );
+          return { title: ev.summary, days };
+        })
+    : [];
 
   const openTotal = lists.reduce((s, l) => s + l.open_count, 0);
   const todayLabel = new Date().toLocaleDateString("de-DE", {
@@ -358,6 +392,20 @@ async function viewHeute() {
     }));
   }
 
+  // Schnellnotiz-Textarea
+  const noteTA = document.createElement("textarea");
+  noteTA.className = "quick-note-ta";
+  noteTA.placeholder = "Notiz fürs Board …";
+  noteTA.value = quickNote;
+  let noteDirty = false;
+  noteTA.addEventListener("input", () => { noteDirty = true; });
+  noteTA.addEventListener("blur", () => {
+    if (noteDirty) {
+      api.patch("api/settings", { quick_note: noteTA.value });
+      noteDirty = false;
+    }
+  });
+
   setMain(
     el("header", { class: "heute-header" },
       el("div", {},
@@ -370,6 +418,18 @@ async function viewHeute() {
               p.emoji || p.name[0])))
         : null
     ),
+
+    countdownEvents.length
+      ? el("div", { class: "countdown-strip" },
+          ...countdownEvents.map((ev) =>
+            el("div", { class: "countdown-pill" },
+              el("span", { class: "countdown-days" }, String(ev.days)),
+              el("span", { class: "countdown-unit" }, ev.days === 1 ? "Tag" : "Tage"),
+              el("span", { class: "countdown-title" }, ev.title)
+            )
+          )
+        )
+      : null,
 
     el("div", { class: "card week-strip-card" },
       el("div", { class: "week-strip" }, ...weekDayNodes),
@@ -403,37 +463,54 @@ async function viewHeute() {
       taskContent
     ),
 
+    muellInfo
+      ? el("div", { class: "muell-banner" },
+          el("span", { class: "muell-icon" }, "🗑️"),
+          el("div", { class: "muell-text" },
+            el("span", { class: "muell-label" }, muellInfo.days === 0 ? "Heute" : "Morgen"),
+            el("span", { class: "muell-what" }, muellInfo.what)
+          )
+        )
+      : null,
+
     el("div", { class: "pin-notes" },
-      // Abendessen-Haftnotiz — tippt sich zur Essens-Woche
-      el("div", { class: "sticky-note", onclick: () => switchTab("essen") },
-        el("span", { class: "note-label" }, "Heute auf dem Tisch"),
-        meal
-          ? el("span", { class: "note-title" }, meal.title)
-          : el("span", { class: "note-title note-title--empty" }, "Noch nichts geplant — antippen"),
-        (meal?.url || meal?.ingredients?.length)
-          ? el("span", { class: "note-actions" },
-              meal.url
-                ? el("a", { href: meal.url, target: "_blank", class: "note-link",
-                    onclick: (e) => e.stopPropagation() }, icon("external-link", 12), "Rezept")
-                : null,
-              meal.ingredients?.length
-                ? el("button", { class: "note-link", onclick: async (e) => {
-                    e.stopPropagation();
-                    await ingredientsToList(meal);
-                    render();
-                  } }, icon("basket", 12), "Zutaten auf die Liste")
-                : null
-            )
-          : null
+      el("div", { class: "pin-notes-row" },
+        // Abendessen-Haftnotiz — tippt sich zur Essens-Woche
+        el("div", { class: "sticky-note", onclick: () => switchTab("essen") },
+          el("span", { class: "note-label" }, "Heute auf dem Tisch"),
+          meal
+            ? el("span", { class: "note-title" }, meal.title)
+            : el("span", { class: "note-title note-title--empty" }, "Noch nichts geplant — antippen"),
+          (meal?.url || meal?.ingredients?.length)
+            ? el("span", { class: "note-actions" },
+                meal.url
+                  ? el("a", { href: meal.url, target: "_blank", class: "note-link",
+                      onclick: (e) => e.stopPropagation() }, icon("external-link", 12), "Rezept")
+                  : null,
+                meal.ingredients?.length
+                  ? el("button", { class: "note-link", onclick: async (e) => {
+                      e.stopPropagation();
+                      await ingredientsToList(meal);
+                      render();
+                    } }, icon("basket", 12), "Zutaten auf die Liste")
+                  : null
+              )
+            : null
+        ),
+        // Einkaufs-Zettel
+        el("div", { class: "kraft-note", onclick: () => switchTab("listen") },
+          icon("shopping-cart", 18),
+          el("span", { class: "note-strong" }, "Einkaufen"),
+          el("span", { class: "note-sub" },
+            openTotal
+              ? (openTotal === 1 ? "1 Artikel offen" : `${openTotal} Artikel offen`)
+              : "Alles besorgt")
+        )
       ),
-      // Einkaufs-Zettel
-      el("div", { class: "kraft-note", onclick: () => switchTab("listen") },
-        icon("shopping-cart", 18),
-        el("span", { class: "note-strong" }, "Einkaufen"),
-        el("span", { class: "note-sub" },
-          openTotal
-            ? (openTotal === 1 ? "1 Artikel offen" : `${openTotal} Artikel offen`)
-            : "Alles besorgt")
+      // Schnellnotiz
+      el("div", { class: "sticky-note sticky-note--memo" },
+        el("span", { class: "note-label" }, "Schnellnotiz"),
+        noteTA
       )
     )
   );
@@ -1132,11 +1209,12 @@ function mkToggle(checked, onchange) {
 }
 
 async function viewEinstellungen() {
-  const [persons, calsRaw, notifSettings, notifSvcRaw] = await Promise.all([
+  const [persons, calsRaw, notifSettings, notifSvcRaw, appSettings] = await Promise.all([
     api.get("api/persons").catch(() => []),
     api.get("api/calendar/calendars").catch(() => ({ error: "Nicht erreichbar" })),
     api.get("api/notifications/settings").catch(() => null),
     api.get("api/notifications/services").catch(() => ({ services: [] })),
+    api.get("api/settings").catch(() => ({})),
   ]);
   const calendars = Array.isArray(calsRaw) ? calsRaw : [];
   const haError   = Array.isArray(calsRaw) ? null : (calsRaw?.detail || calsRaw?.error || "Nicht erreichbar");
@@ -1319,7 +1397,39 @@ async function viewEinstellungen() {
         icon("plus", 16), "Person hinzufügen")
     ),
 
-    notifCard
+    notifCard,
+
+    (() => {
+      const muellInput = el("input", {
+        type: "text",
+        class: "form-input",
+        placeholder: "sensor.nachste_abholung",
+        value: appSettings?.muell_entity || "",
+      });
+      const muellStatus = el("p", { style: "font-size:0.85rem;min-height:1.2em;margin-top:6px" });
+      function setMuellStatus(cls, text) {
+        muellStatus.className = cls;
+        muellStatus.textContent = text;
+        setTimeout(() => { muellStatus.textContent = ""; }, 3000);
+      }
+      return el("div", { class: "card" },
+        el("h2", {}, "🗑️ Mülltag"),
+        el("p", { class: "setting-hint", style: "margin-bottom:10px" },
+          "HA-Entity, deren State z. B. \"Altpapier in 1 tagen\" enthält. Wird auf Heute angezeigt wenn heute oder morgen Abholung ist."),
+        el("p", { class: "form-field-label" }, "Entity-ID"),
+        muellInput,
+        muellStatus,
+        el("div", { class: "form-btns", style: "margin-top:12px" },
+          el("button", { class: "btn-soft", onclick: async () => {
+            setMuellStatus("muted", "Speichern…");
+            const r = await api.patch("api/settings", { muell_entity: muellInput.value.trim() }).catch(() => null);
+            r?.ok
+              ? setMuellStatus("ok", "✓ Gespeichert")
+              : setMuellStatus("err", "✗ Fehler beim Speichern");
+          }}, "Speichern")
+        )
+      );
+    })()
   );
 }
 
