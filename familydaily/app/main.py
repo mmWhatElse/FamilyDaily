@@ -152,10 +152,17 @@ STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
+# index.html immer revalidieren — sonst behält der Browser den alten ?v=-Verweis
+# und lädt das neue app.js/style.css nach einem Update nicht. Die Assets selbst
+# sind über ?v=<version> versioniert und dürfen gecacht werden.
+_HTML_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/{path:path}")
 async def spa(path: str):
     """Serve the frontend; unknown paths fall back to index.html (SPA routing)."""
     candidate = STATIC_DIR / path
     if path and candidate.is_file():
-        return FileResponse(candidate)
-    return FileResponse(STATIC_DIR / "index.html")
+        headers = _HTML_NO_CACHE if candidate.suffix in (".html", ".json") else None
+        return FileResponse(candidate, headers=headers)
+    return FileResponse(STATIC_DIR / "index.html", headers=_HTML_NO_CACHE)

@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.17.2] — 2026-06-15
+
+### Fix
+- **Updates wurden nicht zuverlässig übernommen**: `index.html` wird jetzt mit `Cache-Control: no-cache` ausgeliefert, damit der Browser/die iPhone-WebApp nach einem Addon-Update das neue `app.js`/`style.css` (per `?v=`-Versionierung) auch wirklich lädt — statt am gecachten alten Stand zu hängen
+
+---
+
 ## [0.17.1] — 2026-06-15
 
 ### Fix
