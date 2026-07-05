@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.18.0] - 2026-07-05
+
+### Neu
+- **Aufgaben verschieben**: Offene Aufgaben können per Kalender-Button auf heute, morgen oder ein frei wählbares Datum verschoben werden. Bei wiederkehrenden Aufgaben wird nur die konkrete Aufgabe verschoben, nicht die Serie.
+
+---
+
 ## [0.17.3] - 2026-07-05
 
 ### Fix

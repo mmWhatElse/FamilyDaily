@@ -160,6 +160,19 @@ function addDays(iso, n) {
   return isoDate(d);
 }
 
+function taskShiftButton(task) {
+  if (task.done) return null;
+  return el("button", {
+    class: "btn-icon task-shift-btn",
+    title: "Aufgabe verschieben",
+    "aria-label": "Aufgabe verschieben",
+    onclick: (e) => {
+      e.stopPropagation();
+      openTaskShift(task);
+    },
+  }, icon("calendar", 16));
+}
+
 function toast(msg) {
   document.querySelector(".toast")?.remove();
   const t = el("div", { class: "toast" }, msg);
@@ -185,6 +198,50 @@ async function ingredientsToList(meal) {
     ? `${added} Zutat${added === 1 ? "" : "en"} auf „${target.name}“ gesetzt`
     : "Alles schon auf der Liste");
   return true;
+}
+
+async function shiftTask(task, dueDate, overlay) {
+  await api.patch(`api/tasks/${task.id}`, { due_date: dueDate });
+  overlay?.remove();
+  toast(`Aufgabe verschoben auf ${fmtDate(dueDate)}`);
+  render();
+}
+
+function openTaskShift(task) {
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const dateInput = el("input", {
+    type: "date",
+    class: "form-input",
+    value: task.due_date || isoDate(),
+  });
+  const errMsg = el("p", { class: "err", style: "display:none" });
+
+  overlay.appendChild(el("div", { class: "modal-card task-shift-card" },
+    el("div", { class: "modal-handle" }),
+    el("h2", { style: "margin-bottom:4px" }, "Aufgabe verschieben"),
+    el("p", { class: "shift-task-title" }, task.title),
+    el("div", { class: "shift-options" },
+      el("button", { class: "btn-soft", onclick: () => shiftTask(task, isoDate(), overlay) },
+        icon("sun", 15), "Heute"),
+      el("button", { class: "btn-ghost", onclick: () => shiftTask(task, addDays(isoDate(), 1), overlay) },
+        icon("calendar", 15), "Morgen")
+    ),
+    el("p", { class: "form-field-label" }, "Datum wählen"),
+    el("div", { class: "shift-date-row" },
+      dateInput,
+      el("button", { class: "btn-soft", onclick: async () => {
+        if (!dateInput.value) {
+          errMsg.textContent = "Datum fehlt";
+          errMsg.style.display = "";
+          return;
+        }
+        await shiftTask(task, dateInput.value, overlay);
+      }}, "Setzen")
+    ),
+    errMsg,
+    el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen")
+  ));
+  document.body.appendChild(overlay);
 }
 
 /* ---------- live updates ---------- */
@@ -387,6 +444,7 @@ async function viewHeute() {
           onclick: () => api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render),
         }, t.done ? icon("check", 14) : ""),
         el("span", { class: "task-title", style: "flex:1" }, t.title),
+        taskShiftButton(t),
         ...pips
       );
     }));
@@ -876,6 +934,7 @@ async function viewAufgaben() {
         el("span", { class: "task-title" }, t.title),
         el("div", { class: "task-meta" }, ...pips, dueLbl, recurBadge)
       ),
+      taskShiftButton(t),
       el("button", {
         class: "del-btn",
         onclick: async () => {
