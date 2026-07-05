@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.17.3] - 2026-07-05
+
+### Fix
+- **Seitenleisten-Eintrag fuer Nicht-Admin-User sichtbar**: `panel_admin: false` im Add-on-Manifest gesetzt, damit FamilyDaily auch fuer normale Home-Assistant-Benutzer in der Seitenleiste erscheint
+
+---
+
 ## [0.17.2] — 2026-06-15
 
 ### Fix

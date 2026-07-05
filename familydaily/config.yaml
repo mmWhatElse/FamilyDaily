@@ -1,5 +1,5 @@
 name: FamilyDaily
-version: "0.17.2"
+version: "0.17.3"
 slug: familydaily
 description: Familienkalender, Aufgaben, Einkaufslisten und Essensplan — lokal auf Home Assistant
 url: https://github.com/mmWhatElse/FamilyDaily
@@ -13,6 +13,7 @@ ingress: true
 ingress_port: 8099
 panel_icon: mdi:home-heart
 panel_title: FamilyDaily
+panel_admin: false
 ports:
   8099/tcp: 8099
 ports_description:

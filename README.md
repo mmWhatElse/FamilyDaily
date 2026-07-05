@@ -6,7 +6,7 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 
 Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
-**Version 0.14.0**
+**Version 0.17.3**
 
 ## Funktionen
 
