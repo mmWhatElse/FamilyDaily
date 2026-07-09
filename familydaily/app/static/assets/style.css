@@ -753,6 +753,23 @@ ul.items li .del:active { color: var(--err); }
 .cal-nav {
   display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
 }
+.calendar-view-toggle {
+  display: inline-flex; gap: 3px; padding: 3px; margin: 0 0 14px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+}
+.calendar-view-btn {
+  display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 7px;
+  padding: 7px 10px; background: transparent; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 0.78rem; font-weight: 800;
+}
+.calendar-view-btn.active { background: var(--card); color: var(--accent); box-shadow: var(--sh); }
+.agenda-list { max-height: 65vh; overflow-y: auto; padding-right: 3px; }
+.agenda-day { padding: 4px 0 14px; }
+.agenda-date { margin: 0 0 8px; font-size: 0.88rem; color: var(--muted); }
+.agenda-date.today { color: var(--accent); }
+.agenda-event { margin-bottom: 7px; }
+.agenda-event .event-meta { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agenda-more { margin: 4px 0 12px; width: 100%; justify-content: center; }
 .cal-nav-btn {
   background: var(--card); border: 1.5px solid var(--line); border-radius: var(--radius);
   padding: 9px 13px; cursor: pointer; color: var(--text);

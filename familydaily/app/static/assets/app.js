@@ -1,7 +1,7 @@
 /* FamilyDaily SPA — no build step, plain JS. */
 
 const $main = document.getElementById("view");
-const state = { tab: "heute", listId: null, listName: "", calOffset: 0, taskFilter: null };
+const state = { tab: "heute", listId: null, listName: "", calOffset: 0, calView: "range", agendaYears: 1, taskFilter: null };
 
 /* ---------- helpers ---------- */
 
@@ -582,8 +582,12 @@ async function viewHeute() {
 async function viewKalender() {
   showLoading();
   const today = new Date();
-  const base = new Date(today); base.setDate(today.getDate() + (state.calOffset || 0));
-  const endD = new Date(base); endD.setDate(base.getDate() + 14);
+  const isAgenda = state.calView === "agenda";
+  const base = new Date(today);
+  if (!isAgenda) base.setDate(today.getDate() + (state.calOffset || 0));
+  const endD = new Date(base);
+  if (isAgenda) endD.setFullYear(endD.getFullYear() + state.agendaYears);
+  else endD.setDate(endD.getDate() + 14);
   const start = isoDate(base);
   const end = isoDate(endD);
 
@@ -601,6 +605,72 @@ async function viewKalender() {
         emptyState("wifi-off", "Kalender nicht verbunden",
           "HA-Verbindung prüfen — Kalender aktivierst du in den Einstellungen.")
       )
+    );
+    return;
+  }
+
+  const viewToggle = el("div", { class: "calendar-view-toggle", role: "group", "aria-label": "Kalenderansicht" },
+    el("button", {
+      class: "calendar-view-btn" + (!isAgenda ? " active" : ""),
+      onclick: () => { state.calView = "range"; render(); },
+    }, icon("calendar", 15), "14 Tage"),
+    el("button", {
+      class: "calendar-view-btn" + (isAgenda ? " active" : ""),
+      onclick: () => { state.calView = "agenda"; render(); },
+    }, icon("notes", 15), "Terminübersicht")
+  );
+
+  if (isAgenda) {
+    const groupedAgenda = {};
+    for (const ev of events) {
+      // Mehrtägige Termine, die schon laufen, gehören an den heutigen Beginn der Übersicht.
+      const startDay = (ev.start || "").slice(0, 10);
+      if (!startDay) continue;
+      const day = startDay < isoDate(today) ? isoDate(today) : startDay;
+      if (day) (groupedAgenda[day] = groupedAgenda[day] || []).push(ev);
+    }
+    const agendaDays = Object.entries(groupedAgenda).map(([day, dayEvents]) => {
+      const date = new Date(day + "T12:00:00");
+      const label = date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      return el("section", { class: "agenda-day" },
+        el("h2", { class: "agenda-date" + (day === isoDate(today) ? " today" : "") }, label),
+        ...dayEvents.map((ev) => {
+          const time = ev.all_day ? "Ganztägig" : fmtTime(ev.start);
+          return el("div", {
+            class: "cal-event agenda-event",
+            style: `--pc:${eventColor(ev)}`,
+            onclick: () => openEventForm(ev, persons),
+          },
+            el("span", { class: "cal-event-title" }, ev.summary),
+            el("span", { class: "event-meta" }, ev.calendar),
+            el("span", { class: "cal-event-time" }, time),
+            el("button", {
+              class: "del-btn",
+              onclick: async (e) => {
+                e.stopPropagation();
+                if (!confirm(`"${ev.summary}" löschen?`)) return;
+                await api.post("api/calendar/events/delete", { entity_id: ev.entity_id, uid: ev.uid });
+                render();
+              },
+            }, icon("x", 15))
+          );
+        })
+      );
+    });
+    setMain(
+      el("h1", {}, "Kalender"),
+      viewToggle,
+      el("button", { class: "btn-soft", style: "margin-bottom:16px", onclick: () => openEventForm(null, persons) },
+        icon("plus", 16), "Neuer Termin"),
+      agendaDays.length
+        ? el("div", { class: "agenda-list" },
+            ...agendaDays,
+            el("button", {
+              class: "btn-ghost agenda-more",
+              onclick: () => { state.agendaYears += 1; render(); },
+            }, "Weitere 12 Monate laden")
+          )
+        : emptyState("calendar-check", "Keine kommenden Termine", "In den nächsten 12 Monaten ist nichts eingetragen.")
     );
     return;
   }
@@ -680,6 +750,7 @@ async function viewKalender() {
 
   setMain(
     el("h1", {}, "Kalender"),
+    viewToggle,
     navRow,
     el("button", { class: "btn-soft", style: "margin-bottom:16px", onclick: () => openEventForm(null, persons) },
       icon("plus", 16), "Neuer Termin"),

@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.1] - 2026-07-09
+
+### Neu
+- **Terminübersicht**: Der Kalender bietet jetzt zusätzlich zur 14-Tage-Ansicht eine umschaltbare, scrollbare Liste aller kommenden Termine. Sie ist nach Datum gruppiert und kann bei Bedarf um weitere zwölf Monate erweitert werden.
+
+---
+
 ## [0.19.0] - 2026-07-09
 
 ### Neu
