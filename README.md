@@ -6,7 +6,7 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 
 Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
-**Version 0.19.2**
+**Version 0.19.3**
 
 ## Funktionen
 
@@ -51,8 +51,9 @@ direkt aus HA.
 ## Eigener Level-up-Sound (optional)
 
 FamilyDaily kann beim Erledigen einer Aufgabe einen selbst bereitgestellten Ton spielen.
-Lege dafür eine Datei namens `task-level-up.mp3`, `task-level-up.ogg` oder
-`task-level-up.wav` im Konfigurationsordner des Add-ons ab (im Container: `/config`).
+Lege dafür eine Datei namens `Level_up_fireworks.oga`, `task-level-up.mp3`,
+`task-level-up.ogg`, `task-level-up.oga` oder `task-level-up.wav` im Konfigurationsordner
+des Add-ons ab (im Container: `/config`).
 Die Datei bleibt lokal auf deiner Home-Assistant-Installation und wird nicht über dieses
 Repository verteilt. Ohne Datei verwendet die App automatisch die eingebaute Retro-Fanfare.
 

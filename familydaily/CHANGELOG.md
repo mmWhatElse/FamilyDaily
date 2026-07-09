@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.3] - 2026-07-09
+
+### Neu
+- **OSRS-Sounddatei lokal verwenden**: Das Format `.oga` wird für den optionalen Level-up-Ton unterstützt; eine Datei namens `Level_up_fireworks.oga` wird direkt erkannt.
+
+---
+
 ## [0.19.2] - 2026-07-09
 
 ### Neu

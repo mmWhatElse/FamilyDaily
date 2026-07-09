@@ -155,7 +155,10 @@ app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets"
 # Optionaler, rein lokaler Aufgabenton. Die Datei liegt im Add-on-Konfigurationsordner
 # (/config) und wird deshalb weder mit dem Add-on ausgeliefert noch in Git eingecheckt.
 CUSTOM_SOUND_DIR = Path(os.environ.get("FAMILYDAILY_SOUND_DIR", "/config"))
-CUSTOM_SOUND_NAMES = ("task-level-up.mp3", "task-level-up.ogg", "task-level-up.wav")
+CUSTOM_SOUND_NAMES = (
+    "Level_up_fireworks.oga", "task-level-up.mp3", "task-level-up.ogg",
+    "task-level-up.oga", "task-level-up.wav",
+)
 
 
 @app.get("/api/sounds/task-level-up")
@@ -163,7 +166,8 @@ async def task_level_up_sound():
     for name in CUSTOM_SOUND_NAMES:
         candidate = CUSTOM_SOUND_DIR / name
         if candidate.is_file():
-            return FileResponse(candidate)
+            media_type = "audio/ogg" if candidate.suffix in (".ogg", ".oga") else None
+            return FileResponse(candidate, media_type=media_type)
     return Response(status_code=404)
 
 
