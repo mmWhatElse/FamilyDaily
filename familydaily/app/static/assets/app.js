@@ -184,6 +184,67 @@ function toast(msg) {
   }, 2200);
 }
 
+/* Lokaler eigener Ton hat Vorrang; ohne Datei bleibt die eingebaute Retro-Fanfare aktiv. */
+function playTaskLevelUpSound() {
+  const customSound = new Audio("api/sounds/task-level-up");
+  customSound.volume = 0.7;
+  customSound.play().catch(playSynthTaskLevelUpSound);
+}
+
+function playSynthTaskLevelUpSound() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  try {
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    [[0, 523.25], [0.09, 659.25], [0.18, 783.99], [0.31, 1046.5]].forEach(([offset, frequency]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(frequency, now + offset);
+      gain.gain.setValueAtTime(0.0001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + offset + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.17);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.19);
+    });
+    setTimeout(() => ctx.close(), 700);
+  } catch (e) { /* Ton ist optional, z. B. bei stumm geschaltetem Gerät. */ }
+}
+
+function showTaskLevelUp(task) {
+  document.querySelector(".task-levelup")?.remove();
+  const sparkles = Array.from({ length: 10 }, (_, i) => el("span", {
+    class: "task-levelup-sparkle",
+    style: `--x:${8 + ((i * 29) % 84)}%;--y:${5 + ((i * 41) % 88)}%;--delay:${i * 55}ms`,
+  }, "✦"));
+  const popup = el("div", { class: "task-levelup", role: "status", "aria-live": "polite" },
+    ...sparkles,
+    el("div", { class: "task-levelup-card" },
+      el("div", { class: "task-levelup-icon" }, icon("check", 32)),
+      el("p", { class: "task-levelup-kicker" }, "AUFGABE ERLEDIGT"),
+      el("p", { class: "task-levelup-title" }, task.title),
+      el("p", { class: "task-levelup-subtitle" }, "+1 Familien-XP")
+    )
+  );
+  document.body.appendChild(popup);
+  navigator.vibrate?.(35);
+  setTimeout(() => popup.classList.add("leaving"), 1450);
+  setTimeout(() => popup.remove(), 1750);
+}
+
+function toggleTaskDone(task, event) {
+  event.stopPropagation();
+  const completing = !task.done;
+  if (completing) playTaskLevelUpSound();
+  api.patch(`api/tasks/${task.id}`, { done: completing }).then((res) => {
+    if (res?.detail || res?.error) { toast(res.detail || res.error); return; }
+    if (completing) showTaskLevelUp(task);
+    render();
+  }).catch(() => toast("Aufgabe konnte nicht aktualisiert werden"));
+}
+
 /* Zutaten eines Gerichts auf die erste Einkaufsliste setzen (idempotent) */
 async function ingredientsToList(meal) {
   const lists = await api.get("api/shopping/lists").catch(() => []);
@@ -441,10 +502,7 @@ async function viewHeute() {
       return el("li", { class: "task-item task-item-editable" + (t.done ? " done" : ""), onclick: () => openTaskForm(persons, t) },
         el("button", {
           class: "check",
-          onclick: (e) => {
-            e.stopPropagation();
-            api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render);
-          },
+          onclick: (e) => toggleTaskDone(t, e),
         }, t.done ? icon("check", 14) : ""),
         el("span", { class: "task-title", style: "flex:1" }, t.title),
         taskShiftButton(t),
@@ -1028,10 +1086,7 @@ async function viewAufgaben() {
     return el("li", { class: "task-item task-item-editable" + (t.done ? " done" : ""), onclick: () => openTaskForm(persons, t) },
       el("button", {
         class: "check",
-        onclick: (e) => {
-          e.stopPropagation();
-          api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render);
-        },
+        onclick: (e) => toggleTaskDone(t, e),
       }, t.done ? icon("check", 14) : ""),
       el("div", { class: "task-body" },
         el("span", { class: "task-title" }, t.title),

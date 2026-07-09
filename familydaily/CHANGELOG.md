@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.2] - 2026-07-09
+
+### Neu
+- **Level-up beim Erledigen**: Abgehakte Aufgaben feiern ihren Abschluss mit einer Retro-Animation, haptischem Feedback und Ton. Optional kann eine nur lokal gespeicherte Datei `task-level-up.mp3`, `.ogg` oder `.wav` den eingebauten Ton ersetzen.
+
+---
+
 ## [0.19.1] - 2026-07-09
 
 ### Neu
