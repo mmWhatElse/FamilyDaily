@@ -78,15 +78,19 @@ async def get_tasks(view: str = "open"):
         await _materialize(db)
         if view == "today":
             cur = await db.execute(
-                "SELECT * FROM task WHERE done = 0 AND due_date IS NOT NULL AND due_date <= ? "
+                "SELECT task.*, task_template.recurrence AS recurrence "
+                "FROM task LEFT JOIN task_template ON task.template_id = task_template.id "
+                "WHERE task.done = 0 AND task.due_date IS NOT NULL AND task.due_date <= ? "
                 "ORDER BY due_date, id",
                 (date.today().isoformat(),),
             )
         else:
             cutoff = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
             cur = await db.execute(
-                "SELECT * FROM task WHERE done = 0 OR completed_at > ? "
-                "ORDER BY done, due_date IS NULL, due_date, id",
+                "SELECT task.*, task_template.recurrence AS recurrence "
+                "FROM task LEFT JOIN task_template ON task.template_id = task_template.id "
+                "WHERE task.done = 0 OR task.completed_at > ? "
+                "ORDER BY task.done, task.due_date IS NULL, task.due_date, task.id",
                 (cutoff,),
             )
         return [_row(r) for r in await cur.fetchall()]
@@ -136,13 +140,16 @@ async def patch_task(task_id: int, data: TaskPatch):
         if not await cur.fetchone():
             raise HTTPException(404, "Aufgabe nicht gefunden")
         if data.title is not None:
-            await db.execute("UPDATE task SET title = ? WHERE id = ?", (data.title.strip(), task_id))
+            title = data.title.strip()
+            if not title:
+                raise HTTPException(422, "Titel darf nicht leer sein")
+            await db.execute("UPDATE task SET title = ? WHERE id = ?", (title, task_id))
         if data.person_ids is not None:
             await db.execute(
                 "UPDATE task SET person_ids = ? WHERE id = ?",
                 (json.dumps(data.person_ids), task_id),
             )
-        if data.due_date is not None:
+        if "due_date" in data.model_fields_set:
             await db.execute("UPDATE task SET due_date = ? WHERE id = ?", (data.due_date, task_id))
         if data.done is not None:
             completed = datetime.now(timezone.utc).isoformat() if data.done else None

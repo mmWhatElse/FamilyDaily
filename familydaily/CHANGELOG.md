@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.0] - 2026-07-09
+
+### Neu
+- **Aufgaben direkt bearbeiten**: Ein Tap auf eine Aufgabe öffnet auf den Ansichten „Heute“ und „Aufgaben“ das Bearbeitungsformular. Titel, Fälligkeitsdatum und Zuweisungen lassen sich dort ändern.
+- **Monatsübersicht im Kalender**: Der Datumswähler zeigt zunächst alle Monate eines Jahres; so lassen sich Termine schnell in einem beliebigen Monat anlegen.
+
+### Fix
+- Beim Bearbeiten kann ein Fälligkeitsdatum jetzt auch wieder entfernt werden.
+
+---
+
 ## [0.18.0] - 2026-07-05
 
 ### Neu

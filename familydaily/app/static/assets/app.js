@@ -438,10 +438,13 @@ async function viewHeute() {
         return p ? el("span", { class: "person-pip", style: `background:${p.color}`, title: p.name },
           p.emoji || p.name[0]) : null;
       });
-      return el("li", { class: "task-item" + (t.done ? " done" : "") },
+      return el("li", { class: "task-item task-item-editable" + (t.done ? " done" : ""), onclick: () => openTaskForm(persons, t) },
         el("button", {
           class: "check",
-          onclick: () => api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render),
+          onclick: (e) => {
+            e.stopPropagation();
+            api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render);
+          },
         }, t.done ? icon("check", 14) : ""),
         el("span", { class: "task-title", style: "flex:1" }, t.title),
         taskShiftButton(t),
@@ -827,6 +830,8 @@ function openMonthPicker(activeBase) {
   overlay.appendChild(pickerEl);
   document.body.appendChild(overlay);
 
+  let showMonthOverview = true;
+
   function refresh() {
     const year = pickerDate.getFullYear();
     const month = pickerDate.getMonth();
@@ -835,6 +840,30 @@ function openMonthPicker(activeBase) {
     const lastDay = new Date(year, month + 1, 0);
     let startDow = firstDay.getDay(); // 0=Sun
     startDow = startDow === 0 ? 6 : startDow - 1; // convert to Mon=0
+
+    if (showMonthOverview) {
+      const months = Array.from({ length: 12 }, (_, index) => {
+        const isActive = index === activeBase.getMonth() && year === activeBase.getFullYear();
+        const isCurrent = index === today.getMonth() && year === today.getFullYear();
+        return el("button", {
+          class: "mp-month" + (isActive ? " mp-month-active" : "") + (isCurrent ? " mp-month-current" : ""),
+          onclick: () => {
+            pickerDate = new Date(year, index, 1);
+            showMonthOverview = false;
+            refresh();
+          },
+        }, new Date(year, index, 1).toLocaleDateString("de-DE", { month: "short" }));
+      });
+      pickerEl.replaceChildren(
+        el("div", { class: "mp-head" },
+          el("button", { class: "mp-nav", "aria-label": "Vorheriges Jahr", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year - 1, month, 1); refresh(); } }, icon("chevron-left", 15)),
+          el("span", { class: "mp-label" }, String(year)),
+          el("button", { class: "mp-nav", "aria-label": "Nächstes Jahr", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year + 1, month, 1); refresh(); } }, icon("chevron-right", 15))
+        ),
+        el("div", { class: "mp-month-grid" }, ...months)
+      );
+      return;
+    }
 
     const cells = [];
     ["Mo","Di","Mi","Do","Fr","Sa","So"].forEach((d) =>
@@ -867,7 +896,7 @@ function openMonthPicker(activeBase) {
     pickerEl.replaceChildren(
       el("div", { class: "mp-head" },
         el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month - 1, 1); refresh(); } }, icon("chevron-left", 15)),
-        el("span", { class: "mp-label" }, monthLabel),
+        el("button", { class: "mp-label mp-label-btn", onclick: () => { showMonthOverview = true; refresh(); } }, monthLabel),
         el("button", { class: "mp-nav", onclick: (e) => { e.stopPropagation(); pickerDate = new Date(year, month + 1, 1); refresh(); } }, icon("chevron-right", 15))
       ),
       el("div", { class: "mp-grid" }, ...cells)
@@ -925,10 +954,13 @@ async function viewAufgaben() {
         }, fmtDate(t.due_date))
       : null;
 
-    return el("li", { class: "task-item" + (t.done ? " done" : "") },
+    return el("li", { class: "task-item task-item-editable" + (t.done ? " done" : ""), onclick: () => openTaskForm(persons, t) },
       el("button", {
         class: "check",
-        onclick: () => api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render),
+        onclick: (e) => {
+          e.stopPropagation();
+          api.patch(`api/tasks/${t.id}`, { done: !t.done }).then(render);
+        },
       }, t.done ? icon("check", 14) : ""),
       el("div", { class: "task-body" },
         el("span", { class: "task-title" }, t.title),
@@ -937,7 +969,8 @@ async function viewAufgaben() {
       taskShiftButton(t),
       el("button", {
         class: "del-btn",
-        onclick: async () => {
+        onclick: async (e) => {
+          e.stopPropagation();
           if (t.template_id) {
             const series = confirm("Auch alle künftigen Wiederholungen löschen?");
             await api.del(`api/tasks/${t.id}?series=${series}`);
@@ -967,29 +1000,35 @@ async function viewAufgaben() {
   );
 }
 
-function openTaskForm(persons) {
+function openTaskForm(persons, existing = null) {
+  const isEdit = !!existing;
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
 
-  const titleInput = el("input", { type: "text", placeholder: "Aufgabe", class: "form-input", autocomplete: "off" });
-  const dateInput  = el("input", { type: "date", class: "form-input" });
+  const titleInput = el("input", { type: "text", placeholder: "Aufgabe", class: "form-input", autocomplete: "off", value: existing?.title || "" });
+  const dateInput  = el("input", { type: "date", class: "form-input", value: existing?.due_date || "" });
   const recurSel   = el("select", { class: "form-input" },
     el("option", { value: "none" }, "Keine Wiederholung"),
     el("option", { value: "daily" }, "Täglich"),
     el("option", { value: "weekly" }, "Wöchentlich"),
     el("option", { value: "monthly" }, "Monatlich"),
   );
-  const personChecks = persons.map((p) =>
-    el("label", { class: "person-check-row" },
-      el("input", { type: "checkbox", value: String(p.id) }),
+  recurSel.value = existing?.recurrence || "none";
+  recurSel.disabled = isEdit;
+  const existingPersonIds = new Set(existing?.person_ids || []);
+  const personChecks = persons.map((p) => {
+    const checkbox = el("input", { type: "checkbox", value: String(p.id) });
+    checkbox.checked = existingPersonIds.has(p.id);
+    return el("label", { class: "person-check-row" },
+      checkbox,
       el("span", { class: "person-pip", style: `background:${p.color}` }, p.emoji || p.name[0]),
       " " + p.name
-    )
-  );
+    );
+  });
   const errMsg = el("p", { class: "err", style: "display:none" });
 
   overlay.appendChild(el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
-    el("h2", { style: "margin-bottom:14px" }, "Neue Aufgabe"),
+    el("h2", { style: "margin-bottom:14px" }, isEdit ? "Aufgabe bearbeiten" : "Neue Aufgabe"),
     titleInput,
     el("p", { class: "form-field-label" }, "Fälligkeitsdatum"),
     dateInput,
@@ -1005,12 +1044,9 @@ function openTaskForm(persons) {
         if (!title) { errMsg.textContent = "Titel fehlt"; errMsg.style.display = ""; return; }
         const person_ids = [...overlay.querySelectorAll("input[type=checkbox]:checked")]
           .map((cb) => parseInt(cb.value));
-        const res = await api.post("api/tasks", {
-          title,
-          person_ids,
-          due_date: dateInput.value || null,
-          recurrence: recurSel.value,
-        });
+        const res = isEdit
+          ? await api.patch(`api/tasks/${existing.id}`, { title, person_ids, due_date: dateInput.value || null })
+          : await api.post("api/tasks", { title, person_ids, due_date: dateInput.value || null, recurrence: recurSel.value });
         if (res && res.detail) { errMsg.textContent = res.detail; errMsg.style.display = ""; return; }
         overlay.remove();
         render();

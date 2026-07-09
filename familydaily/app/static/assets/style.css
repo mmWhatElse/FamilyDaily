@@ -791,6 +791,8 @@ ul.items li .del:active { color: var(--err); }
   margin-bottom: 14px;
 }
 .mp-label { font-family: var(--font-head); font-weight: 700; font-size: 1rem; color: var(--heading); }
+.mp-label-btn { background: none; border: none; cursor: pointer; padding: 5px 9px; border-radius: 8px; }
+.mp-label-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .mp-nav {
   background: var(--bg); border: none; border-radius: 8px;
   padding: 7px 13px; cursor: pointer; color: var(--text);
@@ -801,6 +803,14 @@ ul.items li .del:active { color: var(--err); }
 .mp-grid {
   display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
 }
+.mp-month-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mp-month {
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text);
+  padding: 11px 5px; font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+}
+.mp-month:hover { background: var(--accent-soft); color: var(--accent); }
+.mp-month-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mp-month-current:not(.mp-month-active) { border-color: var(--accent); color: var(--accent); }
 .mp-dow {
   text-align: center; font-size: 0.7rem; font-weight: 800;
   color: var(--muted); padding: 4px 0;
@@ -829,6 +839,7 @@ ul.items li .del:active { color: var(--err); }
   box-shadow: var(--sh);
   transition: opacity 0.22s;
 }
+.task-item-editable { cursor: pointer; }
 .task-item.done { opacity: 0.5; }
 .task-item.done .check { background: var(--ok); border-color: var(--ok); }
 
