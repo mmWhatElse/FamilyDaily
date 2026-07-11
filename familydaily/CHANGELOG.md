@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.4] - 2026-07-11
+
+### Geändert
+- **Wiederholungsaufgaben eindeutig löschen**: Beim Löschen kann jetzt klar zwischen dem einzelnen Vorkommen, der vollständigen Serie und Abbrechen gewählt werden. Ein einzeln gelöschtes Vorkommen erscheint nicht mehr sofort erneut.
+- **Mehrtägige Termine in der Terminübersicht**: Termine werden an jedem Tag ihrer Laufzeit aufgeführt. Folgetage sind dezent als „Fortsetzung“ gekennzeichnet; das gilt für ganztägige und zeitgebundene Termine.
+
+### Technik
+- Datenbankmigration ergänzt einen internen Übersprungen-Marker für gezielt gelöschte Serienvorkommen.
+- Regressionstests decken das Löschen eines einzelnen Vorkommens und einer vollständigen Serie ab.
+
+---
+
 ## [0.19.3] - 2026-07-09
 
 ### Neu

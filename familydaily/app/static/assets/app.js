@@ -160,6 +160,35 @@ function addDays(iso, n) {
   return isoDate(d);
 }
 
+function eventDayBounds(ev) {
+  const first = (ev.start || "").slice(0, 10);
+  if (!first) return null;
+  let last = (ev.end || first).slice(0, 10);
+  if (ev.all_day) last = addDays(last, -1);
+  else if ((ev.end || "").slice(11, 16) === "00:00" && last > first) last = addDays(last, -1);
+  return { first, last: last < first ? first : last };
+}
+
+function chooseRecurringDelete(task) {
+  return new Promise((resolve) => {
+    const finish = (choice) => { overlay.remove(); resolve(choice); };
+    const overlay = el("div", { class: "modal-overlay", onclick: (e) => {
+      if (e.target === overlay) finish(null);
+    }});
+    overlay.appendChild(el("div", { class: "modal-card" },
+      el("div", { class: "modal-handle" }),
+      el("h2", { style: "margin-bottom:8px" }, "Wiederholungsaufgabe löschen"),
+      el("p", { class: "muted", style: "margin-bottom:16px" }, `Was soll bei „${task.title}“ gelöscht werden?`),
+      el("div", { class: "form-btns form-btns--stack" },
+        el("button", { class: "btn-soft", onclick: () => finish("series") }, "Ganze Serie löschen"),
+        el("button", { class: "btn-ghost", onclick: () => finish("single") }, "Nur diese Aufgabe löschen"),
+        el("button", { class: "btn-ghost", onclick: () => finish(null) }, "Abbrechen")
+      )
+    ));
+    document.body.appendChild(overlay);
+  });
+}
+
 function taskShiftButton(task) {
   if (task.done) return null;
   return el("button", {
@@ -681,21 +710,23 @@ async function viewKalender() {
   if (isAgenda) {
     const groupedAgenda = {};
     for (const ev of events) {
-      // Mehrtägige Termine, die schon laufen, gehören an den heutigen Beginn der Übersicht.
-      const startDay = (ev.start || "").slice(0, 10);
-      if (!startDay) continue;
-      const day = startDay < isoDate(today) ? isoDate(today) : startDay;
-      if (day) (groupedAgenda[day] = groupedAgenda[day] || []).push(ev);
+      const bounds = eventDayBounds(ev);
+      if (!bounds) continue;
+      let day = bounds.first < start ? start : bounds.first;
+      const stop = bounds.last > end ? end : bounds.last;
+      for (let guard = 0; day <= stop && guard < 370 * state.agendaYears; day = addDays(day, 1), guard++) {
+        (groupedAgenda[day] = groupedAgenda[day] || []).push({ ev, isStart: day === bounds.first });
+      }
     }
     const agendaDays = Object.entries(groupedAgenda).map(([day, dayEvents]) => {
       const date = new Date(day + "T12:00:00");
       const label = date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
       return el("section", { class: "agenda-day" },
         el("h2", { class: "agenda-date" + (day === isoDate(today) ? " today" : "") }, label),
-        ...dayEvents.map((ev) => {
-          const time = ev.all_day ? "Ganztägig" : fmtTime(ev.start);
+        ...dayEvents.map(({ ev, isStart }) => {
+          const time = ev.all_day ? (isStart ? "Ganztägig" : "Fortsetzung") : (isStart ? fmtTime(ev.start) : "Fortsetzung");
           return el("div", {
-            class: "cal-event agenda-event",
+            class: "cal-event agenda-event" + (isStart ? "" : " cal-event--cont"),
             style: `--pc:${eventColor(ev)}`,
             onclick: () => openEventForm(ev, persons),
           },
@@ -738,14 +769,9 @@ async function viewKalender() {
   const winEnd = addDays(start, 13);  // letzter sichtbarer Tag (14-Tage-Fenster)
   const grouped = {};
   for (const ev of events) {
-    const s = (ev.start || "").slice(0, 10);
-    if (!s) continue;
-    let last = (ev.end || s).slice(0, 10);
-    if (ev.all_day) last = addDays(last, -1);  // Ganztags-Ende ist exklusiv
-    else if ((ev.end || "").slice(11, 16) === "00:00" && last > s) {
-      last = addDays(last, -1);                // Ende exakt Mitternacht zählt nicht in den Folgetag
-    }
-    if (last < s) last = s;
+    const bounds = eventDayBounds(ev);
+    if (!bounds) continue;
+    const { first: s, last } = bounds;
     let d = s < winStart ? winStart : s;
     const stop = last > winEnd ? winEnd : last;
     for (let guard = 0; d <= stop && guard < 14; d = addDays(d, 1), guard++) {
@@ -1098,9 +1124,11 @@ async function viewAufgaben() {
         onclick: async (e) => {
           e.stopPropagation();
           if (t.template_id) {
-            const series = confirm("Auch alle künftigen Wiederholungen löschen?");
-            await api.del(`api/tasks/${t.id}?series=${series}`);
+            const choice = await chooseRecurringDelete(t);
+            if (!choice) return;
+            await api.del(`api/tasks/${t.id}?series=${choice === "series"}`);
           } else {
+            if (!confirm(`„${t.title}“ löschen?`)) return;
             await api.del(`api/tasks/${t.id}`);
           }
           render();

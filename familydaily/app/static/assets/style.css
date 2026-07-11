@@ -807,6 +807,8 @@ ul.items li .del:active { color: var(--err); }
 .agenda-date { margin: 0 0 8px; font-size: 0.88rem; color: var(--muted); }
 .agenda-date.today { color: var(--accent); }
 .agenda-event { margin-bottom: 7px; }
+.form-btns--stack { flex-direction: column; align-items: stretch; }
+.form-btns--stack button { width: 100%; justify-content: center; }
 .agenda-event .event-meta { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agenda-more { margin: 4px 0 12px; width: 100%; justify-content: center; }
 .cal-nav-btn {

@@ -84,6 +84,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 
 async def _migrate(db: aiosqlite.Connection) -> None:
+    # task: bewusst verworfene Einzelvorkommen wiederkehrender Aufgaben ausblenden,
+    # ohne dass die Materialisierung sie beim nächsten Laden erneut anlegt.
+    cur = await db.execute("PRAGMA table_info(task)")
+    task_cols = [r[1] for r in await cur.fetchall()]
+    if "skipped" not in task_cols:
+        await db.execute("ALTER TABLE task ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0")
     # notification_settings: einzelner notify_service → JSON-Liste notify_services
     cur = await db.execute("PRAGMA table_info(notification_settings)")
     cols = [r[1] for r in await cur.fetchall()]

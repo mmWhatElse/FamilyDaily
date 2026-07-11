@@ -80,7 +80,8 @@ async def get_tasks(view: str = "open"):
             cur = await db.execute(
                 "SELECT task.*, task_template.recurrence AS recurrence "
                 "FROM task LEFT JOIN task_template ON task.template_id = task_template.id "
-                "WHERE task.done = 0 AND task.due_date IS NOT NULL AND task.due_date <= ? "
+                "WHERE task.skipped = 0 AND task.done = 0 "
+                "AND task.due_date IS NOT NULL AND task.due_date <= ? "
                 "ORDER BY due_date, id",
                 (date.today().isoformat(),),
             )
@@ -89,7 +90,7 @@ async def get_tasks(view: str = "open"):
             cur = await db.execute(
                 "SELECT task.*, task_template.recurrence AS recurrence "
                 "FROM task LEFT JOIN task_template ON task.template_id = task_template.id "
-                "WHERE task.done = 0 OR task.completed_at > ? "
+                "WHERE task.skipped = 0 AND (task.done = 0 OR task.completed_at > ?) "
                 "ORDER BY task.done, task.due_date IS NULL, task.due_date, task.id",
                 (cutoff,),
             )
@@ -166,16 +167,23 @@ async def patch_task(task_id: int, data: TaskPatch):
 
 @router.delete("/{task_id}", status_code=204)
 async def delete_task(task_id: int, series: bool = False):
-    """series=true also deactivates the recurring template behind the instance."""
+    """Delete one occurrence, or permanently remove its complete recurring series."""
     db = await open_db()
     try:
         cur = await db.execute("SELECT template_id FROM task WHERE id = ?", (task_id,))
         row = await cur.fetchone()
-        if row and row["template_id"] and series:
-            await db.execute(
-                "UPDATE task_template SET active = 0 WHERE id = ?", (row["template_id"],)
-            )
-        await db.execute("DELETE FROM task WHERE id = ?", (task_id,))
+        if not row:
+            raise HTTPException(404, "Aufgabe nicht gefunden")
+        template_id = row["template_id"]
+        if template_id and series:
+            await db.execute("DELETE FROM task WHERE template_id = ?", (template_id,))
+            await db.execute("DELETE FROM task_template WHERE id = ?", (template_id,))
+        elif template_id:
+            # Die Zeile bleibt als Tombstone erhalten. _materialize erkennt dadurch,
+            # dass dieses Vorkommen bereits behandelt wurde, während die UI es ausblendet.
+            await db.execute("UPDATE task SET skipped = 1 WHERE id = ?", (task_id,))
+        else:
+            await db.execute("DELETE FROM task WHERE id = ?", (task_id,))
         await db.commit()
         await broadcaster.broadcast({"type": "tasks"})
     finally:
