@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.6] - 2026-07-11
+
+### Geändert
+- **Nächste Müllabholung dauerhaft auf Heute**: Der konfigurierte HA-Sensor wird nun immer angezeigt, solange er einen verfügbaren State liefert. Spätere Abholungen erscheinen kompakt als „Nächste Abholung“; heute und morgen werden weiterhin hervorgehoben.
+- Die Erkennung akzeptiert neben `in X Tag(en)` auch States mit `heute` oder `morgen` unabhängig von Groß-/Kleinschreibung. `unknown` und `unavailable` werden ausgeblendet.
+- Der Hilfetext unter „Mehr → Mülltag“ beschreibt das neue Verhalten.
+
+---
+
 ## [0.19.5] - 2026-07-11
 
 ### Geändert

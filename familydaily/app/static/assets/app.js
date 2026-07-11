@@ -160,6 +160,18 @@ function addDays(iso, n) {
   return isoDate(d);
 }
 
+function parseMuellState(stateValue) {
+  const stateText = String(stateValue || "").trim();
+  if (!stateText || /^(unknown|unavailable)$/i.test(stateText)) return null;
+  const normalized = stateText.toLocaleLowerCase("de-DE");
+  const daysMatch = normalized.match(/\bin\s+(\d+)\s+tag/);
+  const days = daysMatch ? parseInt(daysMatch[1], 10) : null;
+  let urgency = "later";
+  if (/\bheute\b/.test(normalized) || days === 0) urgency = "today";
+  else if (/\bmorgen\b/.test(normalized) || days === 1) urgency = "tomorrow";
+  return { state: stateText, urgency };
+}
+
 function eventDayBounds(ev) {
   const first = (ev.start || "").slice(0, 10);
   if (!first) return null;
@@ -375,17 +387,13 @@ async function viewHeute() {
     api.get(`api/calendar/events?start=${tomorrow}T00:00:00&end=${day30}T00:00:00`).catch(() => null),
   ]);
 
-  // Mülltag: entity state nur laden wenn konfiguriert
+  // Nächste Abholung: konfigurierten Entity-State dauerhaft anzeigen.
   const muellEntityId = appSettings?.muell_entity || "";
   let muellInfo = null;
   if (muellEntityId) {
     const md = await api.get(`api/ha/entity?entity_id=${encodeURIComponent(muellEntityId)}`).catch(() => null);
     if (md?.available) {
-      const m = md.state.match(/^(.+?)\s+in\s+(\d+)\s+tag/i);
-      if (m) {
-        const days = parseInt(m[2], 10);
-        if (days <= 1) muellInfo = { what: m[1], days };
-      }
+      muellInfo = parseMuellState(md.state);
     }
   }
 
@@ -607,11 +615,14 @@ async function viewHeute() {
     ),
 
     muellInfo
-      ? el("div", { class: "muell-banner" },
+      ? el("div", { class: `muell-banner muell-banner--${muellInfo.urgency}` },
           el("span", { class: "muell-icon" }, "🗑️"),
           el("div", { class: "muell-text" },
-            el("span", { class: "muell-label" }, muellInfo.days === 0 ? "Heute" : "Morgen"),
-            el("span", { class: "muell-what" }, muellInfo.what)
+            el("span", { class: "muell-label" },
+              muellInfo.urgency === "today" ? "Abholung heute"
+                : muellInfo.urgency === "tomorrow" ? "Abholung morgen"
+                  : "Nächste Abholung"),
+            el("span", { class: "muell-what" }, muellInfo.state)
           )
         )
       : null,
@@ -1694,7 +1705,7 @@ async function viewEinstellungen() {
       return el("div", { class: "card" },
         el("h2", {}, "🗑️ Mülltag"),
         el("p", { class: "setting-hint", style: "margin-bottom:10px" },
-          "HA-Entity, deren State z. B. \"Altpapier in 1 tagen\" enthält. Wird auf Heute angezeigt wenn heute oder morgen Abholung ist."),
+          "HA-Entity, deren State z. B. \"Altpapier in 10 Tagen\" enthält. Die nächste Abholung wird dauerhaft auf Heute angezeigt; heute und morgen werden besonders hervorgehoben."),
         el("p", { class: "form-field-label" }, "Entity-ID"),
         muellInput,
         muellStatus,

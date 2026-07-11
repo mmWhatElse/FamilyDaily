@@ -366,11 +366,15 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--kraft);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 12px 16px;
   margin-bottom: 14px;
+}
+.muell-banner--today, .muell-banner--tomorrow {
+  background: var(--kraft);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
 }
 .muell-icon { font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
 .muell-text { display: flex; flex-direction: column; gap: 1px; }
@@ -383,6 +387,7 @@ h1 {
   color: var(--accent);
 }
 .muell-what { font-weight: 700; font-size: 0.95rem; }
+.muell-banner--later .muell-label { color: var(--muted); }
 
 /* ─── Haftnotiz + Packpapier (Heute unten) ──────────────────────────────── */
 .pin-notes {
