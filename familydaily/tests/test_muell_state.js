@@ -24,4 +24,9 @@ for (const [input, expected] of cases) {
   }
 }
 
+const mixedBins = context.parse("Gelber Sack, Restmüll Heute").bins;
+if (mixedBins[0].kind !== "yellow" || mixedBins[1].kind !== "residual") {
+  throw new Error(`Falsche Müllfarben: ${JSON.stringify(mixedBins)}`);
+}
+
 console.log(`${cases.length} Mülltag-Formate OK`);

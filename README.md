@@ -6,15 +6,15 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 
 Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
-**Version 0.19.6**
+**Version 0.20.0**
 
 ## Funktionen
 
 | Modul | Was es kann |
 |---|---|
-| **Heute** | Tagesübersicht: Wochenstreifen mit Termin-, Essens- und Aufgaben-Punkten pro Tag, Termine (antippbar), fällige Aufgaben, Abendessen als Haftnotiz, Einkaufs-Zettel — Termine und Aufgaben direkt von hier anlegen |
-| **Kalender** | 14-Tage-Liste und Terminübersicht aus HA-Kalendern; mehrtägige Termine an jedem betroffenen Tag sichtbar; Termine anlegen, bearbeiten, löschen und Personen zuordnen |
-| **Aufgaben** | Aufgaben mit Person, Fälligkeitsdatum, Wiederholung (täglich / wöchentlich / monatlich); einzelne Vorkommen oder ganze Serien gezielt löschbar; Personen-Filter über Chips („Was muss ich heute machen?") |
+| **Heute** | Tagesübersicht mit unterscheidbaren Wochenmarkierungen, Terminen, Aufgaben, Abendessen, Einkaufs-Zettel, nächster Müllabholung und kompaktem Ausblick auf morgen |
+| **Kalender** | 14-Tage-Liste und Terminübersicht aus HA-Kalendern; mehrtägige Termine zusätzlich als durchgehende Zeitspannen; Termine anlegen, bearbeiten, löschen und Personen zuordnen |
+| **Aufgaben** | Aufgaben mit Person, Fälligkeit und Wiederholung; Serien zentral bearbeiten, pausieren, fortsetzen oder löschen; fünf Sekunden Undo nach Abhaken und Löschen – ebenso bei Terminen, Einkäufen und Essen |
 | **Listen** | Mehrere Einkaufslisten, Autovervollständigung, Live-Sync zwischen Geräten; Kategorien mit Gruppierung in Supermarkt-Reihenfolge — einmal zugeordnet, landen Artikel künftig automatisch richtig |
 | **Essen** | Wochenplan Abendessen mit Zutaten pro Gericht: Zutaten vom letzten Mal werden übernommen, ein Tap setzt alles auf die Einkaufsliste; letzte Woche kopieren |
 | **Einstellungen** | Kalender auswählen & einfärben, Familienmitglieder, Benachrichtigungen, helles/dunkles Design |

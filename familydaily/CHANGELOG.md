@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.20.0] - 2026-07-11
+
+### Neu
+- **Wiederholungen verwalten**: Wiederkehrende Aufgaben besitzen jetzt eine eigene Verwaltung. Serien lassen sich bearbeiten, pausieren, fortsetzen und vollständig löschen; Rhythmus, Startdatum und Zuweisungen sind änderbar, der nächste Termin wird angezeigt.
+- **Morgen-Ausblick auf Heute**: Eine kompakte Karte zeigt morgige Termine, Aufgaben und das geplante Abendessen. Auch tägliche Wiederholungen werden für die Vorschau berücksichtigt.
+- **Mehrtägige Kalenderleiste**: Oberhalb der 14-Tage-Liste werden mehrtägige Termine als durchgehende Balken über ihre tatsächliche Zeitspanne dargestellt.
+- **Undo für Aufgaben, Termine, Einkäufe und Essen**: Nach Abhaken oder Löschen erscheint fünf Sekunden lang „Rückgängig“. Löschungen werden erst nach Ablauf dieser Frist wirklich ausgeführt.
+- **Müll-Entity testen**: Unter „Mehr → Mülltag“ prüft ein neuer Button die konfigurierte Entity und zeigt ihren aktuellen State an.
+
+### Geändert
+- **Müllarten auf einen Blick**: Altpapier, Gelber Sack, Biomüll und Restmüll erhalten farbige Chips. Bei einer Abholung morgen erinnert FamilyDaily zusätzlich daran, die Tonne heute Abend rauszustellen.
+- **Verständlicher Wochenstreifen**: Ganztägige Termine, Termine mit Uhrzeit, Essen und Aufgaben verwenden unterschiedliche Markierungen statt gleichartiger Punkte.
+- Serien speichern nun ein Startdatum. Eine automatische Migration ergänzt es bei bestehenden Wiederholungen; Änderungen an einer Serie werden auf offene und zukünftige Instanzen übertragen.
+
+### Tests
+- Regressionstests decken Löschen, Pausieren, Bearbeiten, Fortsetzen, morgige Serienvorschau und typische Müllsensor-States ab.
+- Desktop- und Mobilansicht wurden auf Layout, Überlauf, Morgen-Karte, Wochenmarkierungen und Serienmanager geprüft.
+
+---
+
 ## [0.19.6] - 2026-07-11
 
 ### Geändert

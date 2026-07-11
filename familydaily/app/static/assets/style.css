@@ -313,6 +313,10 @@ h1 {
   width: 6px; height: 6px;
 }
 .week-dot.task { background: var(--ok); }
+.week-mark { position: relative; display: inline-block; flex-shrink: 0; color: var(--mark-color, var(--ok)); }
+.week-mark.event-time { width: 6px; height: 6px; border-radius: 50%; background: var(--mark-color); }
+.week-mark.event-all { width: 7px; height: 7px; border: 1.5px solid var(--mark-color); border-radius: 2px; }
+.week-mark.task { width: 8px; height: 7px; border-bottom: 2px solid var(--ok); transform: rotate(-42deg); }
 
 .week-legend {
   display: flex; justify-content: center; gap: 16px;
@@ -388,6 +392,24 @@ h1 {
 }
 .muell-what { font-weight: 700; font-size: 0.95rem; }
 .muell-banner--later .muell-label { color: var(--muted); }
+.muell-bins { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.muell-bin { padding: 3px 8px; border-radius: 999px; font-size: .7rem; font-weight: 800; background: var(--line); }
+.muell-bin--paper { background: #d9ebff; color: #245a91; }
+.muell-bin--yellow { background: #fff0a8; color: #705500; }
+.muell-bin--bio { background: #dcebc9; color: #3e642e; }
+.muell-bin--residual { background: #dedede; color: #454545; }
+.muell-reminder { margin-top: 5px; color: var(--accent); font-size: .78rem; font-weight: 800; }
+
+.tomorrow-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 15px 17px; margin-bottom: 14px;
+}
+.tomorrow-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.tomorrow-head .section-label { margin: 0 0 1px; }
+.tomorrow-head h2 { font-size: 1.05rem; }
+.tomorrow-date { color: var(--muted); font-size: .75rem; font-weight: 700; }
+.tomorrow-items { display: flex; flex-wrap: wrap; gap: 7px; }
+.tomorrow-item { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 999px; background: var(--bg); font-size: .78rem; font-weight: 700; }
 
 /* ─── Haftnotiz + Packpapier (Heute unten) ──────────────────────────────── */
 .pin-notes {
@@ -759,6 +781,16 @@ ul.items li .del:active { color: var(--err); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   margin-right: 8px;
 }
+.multi-event-board { margin-bottom: 12px; padding: 11px 12px 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.multi-event-board .section-label { margin: 0 0 8px; }
+.multi-event-grid { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); grid-auto-rows: 28px; gap: 4px 0; }
+.multi-event-bar {
+  position: relative; min-width: 0; border: 0; border-radius: 7px; padding: 5px 9px 5px 12px;
+  background: var(--accent-soft); color: var(--text);
+  font: inherit; font-size: .73rem; font-weight: 800;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; cursor: pointer;
+}
+.multi-event-bar::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--pc); }
 .cal-event-time {
   font-family: var(--font-head);
   color: var(--accent); font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
@@ -887,6 +919,27 @@ ul.items li .del:active { color: var(--err); }
 .task-body  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .task-title { font-size: 0.9rem; font-weight: 700; }
 .task-item.done .task-title { text-decoration: line-through; }
+.task-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.task-actions .btn-ghost { margin-top: 0; }
+.series-manager { width: min(560px, calc(100vw - 28px)); }
+.series-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+.series-row { display: flex; align-items: center; gap: 9px; padding: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+.series-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.series-title { font-weight: 800; }
+.series-meta { color: var(--muted); font-size: .74rem; font-weight: 700; }
+.series-people { display: flex; gap: 3px; }
+.series-actions { display: flex; gap: 2px; }
+
+.undo-bar {
+  position: fixed; z-index: 500; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom));
+  transform: translateX(-50%); display: flex; align-items: center; gap: 18px;
+  min-width: min(360px, calc(100vw - 28px)); padding: 11px 12px 11px 16px;
+  border-radius: 12px; color: #fff; background: #29251f; box-shadow: 0 8px 30px rgba(0,0,0,.28);
+  font-size: .84rem; font-weight: 700; animation: undoIn .18s ease-out;
+}
+.undo-bar span { flex: 1; }
+.undo-bar button { border: 0; background: transparent; color: #ffd46b; font: inherit; font-weight: 900; cursor: pointer; }
+@keyframes undoIn { from { opacity: 0; transform: translate(-50%, 12px); } }
 .task-meta  { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 .person-pip {
@@ -1108,6 +1161,11 @@ nav.tabs .brand { display: none; }
   nav.tabs button { padding: 10px 8px 4px; font-size: 0.58rem; }
   nav.tabs button svg.ico { width: 17px; height: 17px; }
 }
+@media (max-width: 520px) {
+  .task-actions { grid-template-columns: 1fr; }
+  .week-legend { gap: 9px; flex-wrap: wrap; }
+  .series-row { align-items: flex-start; }
+}
 @media (min-width: 600px) {
   main { max-width: 560px; padding-left: 24px; padding-right: 24px; }
   .modal-card { border-radius: 14px; max-height: 80vh; }
@@ -1161,6 +1219,7 @@ nav.tabs .brand { display: none; }
   main[data-view="heute"] .week-strip-card,
   main[data-view="heute"] .countdown-strip,
   main[data-view="heute"] .muell-banner,
+  main[data-view="heute"] .tomorrow-card,
   main[data-view="heute"] .pin-notes { grid-column: 1 / -1; }
   main[data-view="heute"] .card,
   main[data-view="heute"] .pin-section,

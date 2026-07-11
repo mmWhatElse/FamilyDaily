@@ -2,6 +2,12 @@
 
 const $main = document.getElementById("view");
 const state = { tab: "heute", listId: null, listName: "", calOffset: 0, calView: "range", agendaYears: 1, taskFilter: null };
+const pendingTaskDeletes = new Set();
+const pendingEventDeletes = new Set();
+const pendingShoppingDeletes = new Set();
+const pendingMealDeletes = new Set();
+let undoTimer = null;
+let undoCommit = null;
 
 /* ---------- helpers ---------- */
 
@@ -160,6 +166,10 @@ function addDays(iso, n) {
   return isoDate(d);
 }
 
+function daysBetween(from, to) {
+  return Math.round((new Date(to + "T12:00:00") - new Date(from + "T12:00:00")) / 86400000);
+}
+
 function parseMuellState(stateValue) {
   const stateText = String(stateValue || "").trim();
   if (!stateText || /^(unknown|unavailable)$/i.test(stateText)) return null;
@@ -169,7 +179,16 @@ function parseMuellState(stateValue) {
   let urgency = "later";
   if (/\bheute\b/.test(normalized) || days === 0) urgency = "today";
   else if (/\bmorgen\b/.test(normalized) || days === 1) urgency = "tomorrow";
-  return { state: stateText, urgency };
+  const pickupText = stateText.replace(/\s+(?:in\s+\d+\s+tag(?:en)?|heute|morgen)\s*$/i, "").trim();
+  const bins = pickupText.split(/\s*,\s*|\s+und\s+/i).filter(Boolean).map((name) => {
+    const n = name.toLocaleLowerCase("de-DE");
+    const kind = /papier|karton/.test(n) ? "paper"
+      : /gelb|kunststoff|verpack/.test(n) ? "yellow"
+        : /bio|kompost/.test(n) ? "bio"
+          : /rest/.test(n) ? "residual" : "other";
+    return { name, kind };
+  });
+  return { state: stateText, urgency, bins };
 }
 
 function eventDayBounds(ev) {
@@ -225,6 +244,33 @@ function toast(msg) {
   }, 2200);
 }
 
+function offerUndo(message, onUndo, onCommit) {
+  if (undoCommit) undoCommit();
+  clearTimeout(undoTimer);
+  document.querySelector(".undo-bar")?.remove();
+  let settled = false;
+  const bar = el("div", { class: "undo-bar", role: "status" },
+    el("span", {}, message),
+    el("button", { onclick: async () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(undoTimer);
+      undoCommit = null;
+      bar.remove();
+      await onUndo?.();
+    }}, "Rückgängig")
+  );
+  undoCommit = async () => {
+    if (settled) return;
+    settled = true;
+    undoCommit = null;
+    bar.remove();
+    await onCommit?.();
+  };
+  document.body.appendChild(bar);
+  undoTimer = setTimeout(() => undoCommit?.(), 5000);
+}
+
 /* Lokaler eigener Ton hat Vorrang; ohne Datei bleibt die eingebaute Retro-Fanfare aktiv. */
 function playTaskLevelUpSound() {
   const customSound = new Audio("api/sounds/task-level-up");
@@ -278,7 +324,75 @@ function toggleTaskDone(task, event) {
     if (res?.detail || res?.error) { toast(res.detail || res.error); return; }
     if (completing) showTaskFireworks();
     render();
+    offerUndo(completing ? "Aufgabe erledigt" : "Aufgabe wieder geöffnet", async () => {
+      await api.patch(`api/tasks/${task.id}`, { done: !completing });
+      render();
+    });
   }).catch(() => toast("Aufgabe konnte nicht aktualisiert werden"));
+}
+
+function scheduleTaskDelete(task, series = false) {
+  pendingTaskDeletes.add(task.id);
+  render();
+  offerUndo(series ? "Aufgabenserie wird gelöscht" : "Aufgabe wird gelöscht", () => {
+    pendingTaskDeletes.delete(task.id);
+    render();
+  }, async () => {
+    await api.del(`api/tasks/${task.id}?series=${series}`);
+    pendingTaskDeletes.delete(task.id);
+    render();
+  });
+}
+
+function eventDeleteKey(ev) { return `${ev.entity_id}:${ev.uid}:${ev.recurrence_id || ""}`; }
+
+function scheduleEventDelete(ev) {
+  const key = eventDeleteKey(ev);
+  pendingEventDeletes.add(key);
+  render();
+  offerUndo("Termin wird gelöscht", () => {
+    pendingEventDeletes.delete(key);
+    render();
+  }, async () => {
+    await api.post("api/calendar/events/delete", {
+      entity_id: ev.entity_id, uid: ev.uid, recurrence_id: ev.recurrence_id || null,
+    });
+    pendingEventDeletes.delete(key);
+    render();
+  });
+}
+
+function toggleShoppingItem(item) {
+  const checked = !item.checked;
+  api.patch(`api/shopping/items/${item.id}`, { checked }).then(() => {
+    render();
+    offerUndo(checked ? "Artikel abgehakt" : "Artikel wieder geöffnet", async () => {
+      await api.patch(`api/shopping/items/${item.id}`, { checked: !checked });
+      render();
+    });
+  });
+}
+
+function scheduleShoppingDelete(item) {
+  pendingShoppingDeletes.add(item.id);
+  render();
+  offerUndo("Artikel wird gelöscht", () => {
+    pendingShoppingDeletes.delete(item.id); render();
+  }, async () => {
+    await api.del(`api/shopping/items/${item.id}`);
+    pendingShoppingDeletes.delete(item.id); render();
+  });
+}
+
+function scheduleMealDelete(day) {
+  pendingMealDeletes.add(day);
+  render();
+  offerUndo("Essen wird gelöscht", () => {
+    pendingMealDeletes.delete(day); render();
+  }, async () => {
+    await api.del(`api/meals/${day}`);
+    pendingMealDeletes.delete(day); render();
+  });
 }
 
 /* Zutaten eines Gerichts auf die erste Einkaufsliste setzen (idempotent) */
@@ -374,8 +488,10 @@ async function viewHeute() {
 
   const day30 = addDays(today, 30);
   const tomorrow = addDays(today, 1);
+  const dayAfterTomorrow = addDays(today, 2);
 
-  const [lists, tasks, weekMeals, weekTasks, weekCal, persons, weather, appSettings, countdownRaw] = await Promise.all([
+  const [lists, tasks, weekMeals, weekTasks, weekCal, persons, weather, appSettings, countdownRaw,
+    tomorrowTasks, tomorrowCal, tomorrowMeals] = await Promise.all([
     api.get("api/shopping/lists").catch(() => []),
     api.get("api/tasks?view=today").catch(() => []),
     api.get(`api/meals?start=${weekStart}&end=${weekEnd}`).catch(() => []),
@@ -385,7 +501,12 @@ async function viewHeute() {
     api.get("api/weather").catch(() => null),
     api.get("api/settings").catch(() => ({})),
     api.get(`api/calendar/events?start=${tomorrow}T00:00:00&end=${day30}T00:00:00`).catch(() => null),
+    api.get(`api/tasks/preview?target=${tomorrow}`).catch(() => []),
+    api.get(`api/calendar/events?start=${tomorrow}T00:00:00&end=${dayAfterTomorrow}T00:00:00`).catch(() => []),
+    api.get(`api/meals?start=${tomorrow}&end=${tomorrow}`).catch(() => []),
   ]);
+  const visibleTasks = tasks.filter((t) => !pendingTaskDeletes.has(t.id));
+  const visibleWeekTasks = weekTasks.filter((t) => !pendingTaskDeletes.has(t.id));
 
   // Nächste Abholung: konfigurierten Entity-State dauerhaft anzeigen.
   const muellEntityId = appSettings?.muell_entity || "";
@@ -428,7 +549,7 @@ async function viewHeute() {
 
   const weekMealMap = Object.fromEntries(weekMeals.map((m) => [m.date, m]));
   const weekTaskMap = {};
-  weekTasks.forEach((t) => {
+  visibleWeekTasks.forEach((t) => {
     if (t.due_date && !t.done) {
       (weekTaskMap[t.due_date] = weekTaskMap[t.due_date] || []).push(t);
     }
@@ -463,11 +584,15 @@ async function viewHeute() {
 
     const dots = [];
     (weekEvMap[iso] || []).slice(0, 3).forEach((ev) =>
-      dots.push(el("span", { class: "week-dot", style: `background:${eventColor(ev)}` }))
+      dots.push(el("span", {
+        class: `week-mark ${ev.all_day ? "event-all" : "event-time"}`,
+        style: `--mark-color:${eventColor(ev)}`,
+        title: ev.all_day ? "Ganztägiger Termin" : "Termin mit Uhrzeit",
+      }))
     );
     if (weekMealMap[iso]) dots.push(el("span", { class: "week-dot meal" }));
     (weekTaskMap[iso] || []).slice(0, 3).forEach(() =>
-      dots.push(el("span", { class: "week-dot task" }))
+      dots.push(el("span", { class: "week-mark task", title: "Aufgabe" }))
     );
 
     weekDayNodes.push(
@@ -490,7 +615,7 @@ async function viewHeute() {
   }
   const subParts = [];
   if (calOk) subParts.push(cal.length === 1 ? "1 Termin" : `${cal.length} Termine`);
-  const openToday = tasks.filter((t) => !t.done).length;
+  const openToday = visibleTasks.filter((t) => !t.done).length;
   subParts.push(openToday === 1 ? "1 Aufgabe" : `${openToday} Aufgaben`);
   subParts.push(meal ? "Essen steht fest" : "Essen noch offen");
 
@@ -521,11 +646,11 @@ async function viewHeute() {
 
   // Aufgaben-Inhalt
   let taskContent;
-  if (tasks.length === 0) {
+  if (visibleTasks.length === 0) {
     taskContent = el("div", { class: "card" },
       emptyState("circle-check", "Alles erledigt", "Keine offenen Aufgaben heute"));
   } else {
-    taskContent = el("ul", { class: "task-list" }, ...tasks.map((t) => {
+    taskContent = el("ul", { class: "task-list" }, ...visibleTasks.map((t) => {
       const pips = (t.person_ids || []).map((pid) => {
         const p = personMap[pid];
         return p ? el("span", { class: "person-pip", style: `background:${p.color}`, title: p.name },
@@ -557,6 +682,16 @@ async function viewHeute() {
     }
   });
 
+  const tomorrowEvents = Array.isArray(tomorrowCal)
+    ? tomorrowCal.filter((ev) => !pendingEventDeletes.has(eventDeleteKey(ev))) : [];
+  const tomorrowMeal = tomorrowMeals[0] || null;
+  const tomorrowItems = [
+    ...tomorrowEvents.slice(0, 3).map((ev) => ({ icon: "calendar", text: ev.summary })),
+    ...tomorrowTasks.filter((t) => !pendingTaskDeletes.has(t.id)).slice(0, 3)
+      .map((t) => ({ icon: "checklist", text: t.title })),
+    ...(tomorrowMeal ? [{ icon: "tools-kitchen-2", text: tomorrowMeal.title }] : []),
+  ];
+
   setMain(
     el("header", { class: "heute-header" },
       el("div", {},
@@ -585,9 +720,10 @@ async function viewHeute() {
     el("div", { class: "card week-strip-card" },
       el("div", { class: "week-strip" }, ...weekDayNodes),
       el("div", { class: "week-legend" },
-        el("span", {}, el("span", { class: "week-dot", style: "background:var(--accent)" }), "Termine"),
+        el("span", {}, el("span", { class: "week-mark event-all", style: "--mark-color:var(--accent)" }), "Ganztägig"),
+        el("span", {}, el("span", { class: "week-mark event-time", style: "--mark-color:var(--accent)" }), "Termin"),
         el("span", {}, el("span", { class: "week-dot meal" }), "Essen"),
-        el("span", {}, el("span", { class: "week-dot task" }), "Aufgaben")
+        el("span", {}, el("span", { class: "week-mark task" }), "Aufgabe")
       )
     ),
 
@@ -622,10 +758,27 @@ async function viewHeute() {
               muellInfo.urgency === "today" ? "Abholung heute"
                 : muellInfo.urgency === "tomorrow" ? "Abholung morgen"
                   : "Nächste Abholung"),
-            el("span", { class: "muell-what" }, muellInfo.state)
+            el("span", { class: "muell-what" }, muellInfo.state),
+            muellInfo.bins.length
+              ? el("span", { class: "muell-bins" }, ...muellInfo.bins.map((bin) =>
+                  el("span", { class: `muell-bin muell-bin--${bin.kind}` }, bin.name)))
+              : null,
+            muellInfo.urgency === "tomorrow"
+              ? el("span", { class: "muell-reminder" }, "Heute Abend Tonne rausstellen") : null
           )
         )
       : null,
+
+    el("section", { class: "tomorrow-card" },
+      el("div", { class: "tomorrow-head" },
+        el("div", {}, el("span", { class: "section-label" }, "Ausblick"), el("h2", {}, "Morgen")),
+        el("span", { class: "tomorrow-date" }, fmtDate(tomorrow))
+      ),
+      tomorrowItems.length
+        ? el("div", { class: "tomorrow-items" }, ...tomorrowItems.map((item) =>
+            el("span", { class: "tomorrow-item" }, icon(item.icon, 14), item.text)))
+        : el("p", { class: "muted" }, "Morgen ist noch nichts geplant")
+    ),
 
     el("div", { class: "pin-notes" },
       el("div", { class: "pin-notes-row" },
@@ -691,6 +844,7 @@ async function viewKalender() {
       api.get("api/persons").catch(() => []),
     ]);
     if (!Array.isArray(events)) throw new Error(events?.detail || events?.error || "Fehler");
+    events = events.filter((ev) => !pendingEventDeletes.has(eventDeleteKey(ev)));
   } catch (e) {
     setMain(
       el("h1", {}, "Kalender"),
@@ -743,9 +897,7 @@ async function viewKalender() {
               class: "del-btn",
               onclick: async (e) => {
                 e.stopPropagation();
-                if (!confirm(`"${ev.summary}" löschen?`)) return;
-                await api.post("api/calendar/events/delete", { entity_id: ev.entity_id, uid: ev.uid });
-                render();
+                scheduleEventDelete(ev);
               },
             }, icon("x", 15))
           );
@@ -785,6 +937,25 @@ async function viewKalender() {
     }
   }
 
+  const multiEvents = events.map((ev) => ({ ev, bounds: eventDayBounds(ev) }))
+    .filter(({ bounds }) => bounds && bounds.last > bounds.first && bounds.last >= winStart && bounds.first <= winEnd);
+  const multiBoard = multiEvents.length
+    ? el("section", { class: "multi-event-board" },
+        el("p", { class: "section-label" }, "Mehrtägig"),
+        el("div", { class: "multi-event-grid" }, ...multiEvents.map(({ ev, bounds }, row) => {
+          const clippedStart = bounds.first < winStart ? winStart : bounds.first;
+          const clippedEnd = bounds.last > winEnd ? winEnd : bounds.last;
+          const column = daysBetween(winStart, clippedStart) + 1;
+          const span = daysBetween(clippedStart, clippedEnd) + 1;
+          return el("button", {
+            class: "multi-event-bar",
+            style: `--pc:${eventColor(ev)};grid-column:${column} / span ${span};grid-row:${row + 1}`,
+            onclick: () => openEventForm(ev, persons),
+            title: `${ev.summary}: ${fmtDate(bounds.first)} – ${fmtDate(bounds.last)}`,
+          }, ev.summary);
+        }))
+      ) : null;
+
   const dayEls = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(base); d.setDate(base.getDate() + i);
@@ -812,9 +983,7 @@ async function viewKalender() {
           class: "del-btn",
           onclick: async (e) => {
             e.stopPropagation();
-            if (!confirm(`"${ev.summary}" löschen?`)) return;
-            await api.post("api/calendar/events/delete", { entity_id: ev.entity_id, uid: ev.uid });
-            render();
+            scheduleEventDelete(ev);
           },
         }, icon("x", 15))
       );
@@ -844,6 +1013,7 @@ async function viewKalender() {
     navRow,
     el("button", { class: "btn-soft", style: "margin-bottom:16px", onclick: () => openEventForm(null, persons) },
       icon("plus", 16), "Neuer Termin"),
+    multiBoard,
     ...dayEls
   );
 }
@@ -1080,8 +1250,9 @@ async function viewAufgaben() {
   if (state.taskFilter != null && !personMap[state.taskFilter]) state.taskFilter = null;
   const matchesFilter = (t) =>
     state.taskFilter == null || (t.person_ids || []).includes(state.taskFilter);
-  const open = tasks.filter((t) => !t.done && matchesFilter(t));
-  const done = tasks.filter((t) => t.done && matchesFilter(t));
+  const visibleTasks = tasks.filter((t) => !pendingTaskDeletes.has(t.id));
+  const open = visibleTasks.filter((t) => !t.done && matchesFilter(t));
+  const done = visibleTasks.filter((t) => t.done && matchesFilter(t));
 
   function chip(label, pid, color) {
     const active = state.taskFilter === pid;
@@ -1132,12 +1303,11 @@ async function viewAufgaben() {
           if (t.template_id) {
             const choice = await chooseRecurringDelete(t);
             if (!choice) return;
-            await api.del(`api/tasks/${t.id}?series=${choice === "series"}`);
+            scheduleTaskDelete(t, choice === "series");
           } else {
             if (!confirm(`„${t.title}“ löschen?`)) return;
-            await api.del(`api/tasks/${t.id}`);
+            scheduleTaskDelete(t);
           }
-          render();
         },
       }, icon("x", 15))
     );
@@ -1145,8 +1315,11 @@ async function viewAufgaben() {
 
   setMain(
     el("h1", {}, "Aufgaben"),
-    el("button", { class: "btn-soft", style: "margin-bottom:16px",
-      onclick: () => openTaskForm(persons) }, icon("plus", 16), "Neue Aufgabe"),
+    el("div", { class: "task-actions" },
+      el("button", { class: "btn-soft", onclick: () => openTaskForm(persons) }, icon("plus", 16), "Neue Aufgabe"),
+      el("button", { class: "btn-ghost", onclick: () => openSeriesManager(persons) },
+        icon("repeat", 16), "Wiederholungen verwalten")
+    ),
     chipRow,
     fetchOk
       ? (open.length
@@ -1158,6 +1331,86 @@ async function viewAufgaben() {
     done.length ? el("p", { class: "section-label" }, "Erledigt") : null,
     done.length ? el("ul", { class: "task-list" }, ...done.map(taskRow)) : null
   );
+}
+
+async function openSeriesManager(persons) {
+  const series = await api.get("api/tasks/series").catch(() => []);
+  const personMap = Object.fromEntries(persons.map((p) => [p.id, p]));
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => {
+    if (e.target === overlay) overlay.remove();
+  }});
+  const rows = series.map((s) => el("div", { class: "series-row" },
+    el("div", { class: "series-main" },
+      el("span", { class: "series-title" }, s.title),
+      el("span", { class: "series-meta" },
+        `${RECUR_LABEL[s.recurrence]} · ${s.active ? `nächste: ${fmtDate(s.next_due)}` : "pausiert"}`),
+      el("span", { class: "series-people" }, ...(s.person_ids || []).map((id) => {
+        const p = personMap[id];
+        return p ? el("span", { class: "person-pip person-pip--sm", style: `background:${p.color}` }, p.emoji || p.name[0]) : null;
+      }))
+    ),
+    el("div", { class: "series-actions" },
+      el("button", { class: "btn-icon", title: s.active ? "Pausieren" : "Fortsetzen", onclick: async () => {
+        await api.patch(`api/tasks/series/${s.id}`, { active: !s.active });
+        overlay.remove(); openSeriesManager(persons);
+      }}, icon(s.active ? "moon" : "refresh", 15)),
+      el("button", { class: "btn-icon", title: "Bearbeiten", onclick: () => {
+        overlay.remove(); openSeriesForm(s, persons);
+      }}, icon("pencil", 15)),
+      el("button", { class: "btn-icon", title: "Serie löschen", onclick: () => {
+        overlay.remove();
+        offerUndo("Aufgabenserie wird gelöscht", () => openSeriesManager(persons),
+          () => api.del(`api/tasks/series/${s.id}`));
+      }}, icon("x", 15))
+    )
+  ));
+  overlay.appendChild(el("div", { class: "modal-card series-manager" },
+    el("div", { class: "modal-handle" }),
+    el("h2", {}, "Wiederholungen"),
+    el("p", { class: "muted" }, "Serien bearbeiten, pausieren oder vollständig löschen."),
+    rows.length ? el("div", { class: "series-list" }, ...rows)
+      : emptyState("repeat", "Keine Wiederholungen", "Wiederkehrende Aufgaben erscheinen hier."),
+    el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Schließen")
+  ));
+  document.body.appendChild(overlay);
+}
+
+function openSeriesForm(series, persons) {
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => {
+    if (e.target === overlay) overlay.remove();
+  }});
+  const titleInput = el("input", { class: "form-input", value: series.title });
+  const dateInput = el("input", { type: "date", class: "form-input", value: series.start_date || isoDate() });
+  const recurrence = el("select", { class: "form-input" },
+    el("option", { value: "daily" }, "Täglich"),
+    el("option", { value: "weekly" }, "Wöchentlich"),
+    el("option", { value: "monthly" }, "Monatlich"));
+  recurrence.value = series.recurrence;
+  const selected = new Set(series.person_ids || []);
+  const checks = persons.map((p) => {
+    const cb = el("input", { type: "checkbox", value: p.id }); cb.checked = selected.has(p.id);
+    return el("label", { class: "person-check-row" }, cb,
+      el("span", { class: "person-pip", style: `background:${p.color}` }, p.emoji || p.name[0]), ` ${p.name}`);
+  });
+  overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }), el("h2", {}, "Wiederholung bearbeiten"),
+    el("p", { class: "form-field-label" }, "Titel"), titleInput,
+    el("p", { class: "form-field-label" }, "Rhythmus"), recurrence,
+    el("p", { class: "form-field-label" }, "Start / Wochentag"), dateInput,
+    ...checks,
+    el("div", { class: "form-btns" },
+      el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
+      el("button", { class: "btn-soft", onclick: async () => {
+        const person_ids = [...overlay.querySelectorAll("input[type=checkbox]:checked")].map((cb) => Number(cb.value));
+        await api.patch(`api/tasks/series/${series.id}`, {
+          title: titleInput.value.trim(), recurrence: recurrence.value,
+          start_date: dateInput.value, person_ids,
+        });
+        overlay.remove(); render();
+      }}, "Speichern")
+    )
+  ));
+  document.body.appendChild(overlay);
 }
 
 function openTaskForm(persons, existing = null) {
@@ -1245,7 +1498,8 @@ async function addList() {
 }
 
 async function viewListDetail() {
-  const items = await api.get(`api/shopping/lists/${state.listId}/items`);
+  const items = (await api.get(`api/shopping/lists/${state.listId}/items`))
+    .filter((i) => !pendingShoppingDeletes.has(i.id));
   const open = items.filter((i) => !i.checked);
   const done = items.filter((i) => i.checked);
 
@@ -1276,7 +1530,7 @@ async function viewListDetail() {
     el("li", { class: i.checked ? "checked" : "" },
       el("button", {
         class: "check",
-        onclick: () => api.patch(`api/shopping/items/${i.id}`, { checked: !i.checked }).then(render),
+        onclick: () => toggleShoppingItem(i),
       }, i.checked ? icon("check", 14) : ""),
       el("span", { class: "label" }, i.name),
       i.checked ? null : el("button", {
@@ -1287,7 +1541,7 @@ async function viewListDetail() {
       }, i.category ? i.category : icon("tag", 12)),
       el("button", {
         class: "del",
-        onclick: () => api.del(`api/shopping/items/${i.id}`).then(render),
+        onclick: () => scheduleShoppingDelete(i),
       }, icon("x", 15))
     );
 
@@ -1371,7 +1625,7 @@ async function viewEssen() {
   const today = isoDate();
 
   const meals = await api.get(`api/meals?start=${start}&end=${end}`).catch(() => []);
-  const mealMap = Object.fromEntries(meals.map((m) => [m.date, m]));
+  const mealMap = Object.fromEntries(meals.filter((m) => !pendingMealDeletes.has(m.date)).map((m) => [m.date, m]));
 
   const dayRows = [];
   for (let i = 0; i < 7; i++) {
@@ -1409,7 +1663,7 @@ async function viewEssen() {
       meal
         ? el("button", {
             class: "del-btn",
-            onclick: async (e) => { e.stopPropagation(); await api.del(`api/meals/${day}`); render(); },
+            onclick: (e) => { e.stopPropagation(); scheduleMealDelete(day); },
           }, icon("x", 15))
         : null
     ));
@@ -1710,6 +1964,15 @@ async function viewEinstellungen() {
         muellInput,
         muellStatus,
         el("div", { class: "form-btns", style: "margin-top:12px" },
+          el("button", { class: "btn-ghost", onclick: async () => {
+            const entityId = muellInput.value.trim();
+            if (!entityId) { setMuellStatus("err", "Entity-ID fehlt"); return; }
+            setMuellStatus("muted", "Verbindung wird geprüft …");
+            const result = await api.get(`api/ha/entity?entity_id=${encodeURIComponent(entityId)}`).catch(() => null);
+            result?.available && parseMuellState(result.state)
+              ? setMuellStatus("ok", `✓ Verbunden · ${result.state}`)
+              : setMuellStatus("err", "✕ Entity nicht erreichbar oder ohne gültigen State");
+          }}, icon("wifi-off", 15), "Verbindung testen"),
           el("button", { class: "btn-soft", onclick: async () => {
             setMuellStatus("muted", "Speichern…");
             const r = await api.patch("api/settings", { muell_entity: muellInput.value.trim() }).catch(() => null);
