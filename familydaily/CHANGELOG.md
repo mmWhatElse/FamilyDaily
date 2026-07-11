@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.19.5] - 2026-07-11
+
+### Geändert
+- **Kurzes Feuerwerk statt Level-up-Popup**: Beim Erledigen einer Aufgabe erscheinen für rund 1,5 Sekunden drei einfache, farbige Partikelbursts. Das bisherige Popup samt Abdunklung und „Familien-XP“-Karte entfällt; Sound und haptisches Feedback bleiben erhalten.
+- Bei aktivierter Systemeinstellung „Bewegung reduzieren“ wird der visuelle Effekt vollständig ausgeblendet.
+
+---
+
 ## [0.19.4] - 2026-07-11
 
 ### Geändert

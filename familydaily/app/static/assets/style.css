@@ -632,43 +632,21 @@ ul.items li .del:active { color: var(--err); }
   100% { transform: scale(1); }
 }
 
-/* Retro-Level-up für erledigte Aufgaben */
-.task-levelup {
-  position: fixed; inset: 0; z-index: 300; pointer-events: none;
-  display: grid; place-items: center; overflow: hidden;
-  background: rgba(38, 26, 9, 0.22);
-  animation: levelupFade 1.75s ease forwards;
+/* Kurzes, bewusst simples Feuerwerk für erledigte Aufgaben */
+.task-fireworks { position: fixed; inset: 0; z-index: 300; pointer-events: none; overflow: hidden; }
+.firework-burst { position: absolute; left: var(--x); top: var(--y); width: 1px; height: 1px; }
+.firework-burst i {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--color);
+  box-shadow: 0 0 6px var(--color);
+  animation: fireworkParticle .85s var(--delay) ease-out both;
 }
-.task-levelup-card {
-  position: relative; z-index: 1; width: min(300px, calc(100vw - 44px));
-  padding: 24px 20px 21px; text-align: center; color: #fff6cc;
-  background: linear-gradient(145deg, #49310d, #201505);
-  border: 3px solid #e6b94e; border-radius: 6px;
-  box-shadow: 0 0 0 4px #6e4713, 0 12px 38px rgba(0,0,0,.42);
-  animation: levelupCard 1.55s cubic-bezier(.2,.9,.25,1) forwards;
+@keyframes fireworkParticle {
+  0% { opacity: 0; transform: rotate(var(--angle)) translateX(0) scale(.4); }
+  12% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--angle)) translateX(var(--distance)) scale(.15); }
 }
-.task-levelup-icon {
-  width: 56px; height: 56px; margin: -52px auto 10px; display: grid; place-items: center;
-  background: #7da05c; color: #fff; border: 3px solid #f7d573; border-radius: 50%;
-  box-shadow: 0 3px 0 #3e642e;
-}
-.task-levelup-kicker { color: #f7d573; font-size: .67rem; font-weight: 900; letter-spacing: .16em; }
-.task-levelup-title { margin: 5px 0 2px; font-family: var(--font-head); font-size: 1.22rem; font-weight: 800; line-height: 1.12; }
-.task-levelup-subtitle { color: #ffd95b; font-size: .79rem; font-weight: 800; letter-spacing: .06em; }
-.task-levelup-sparkle {
-  position: absolute; left: var(--x); top: var(--y); color: #ffe16a; font-size: 1.25rem;
-  text-shadow: 0 0 10px #ffbb3e; animation: levelupSparkle .7s var(--delay) ease-out both;
-}
-@keyframes levelupCard {
-  0% { opacity: 0; transform: scale(.6) translateY(26px); }
-  18%, 72% { opacity: 1; transform: scale(1) translateY(0); }
-  100% { opacity: 0; transform: scale(.94) translateY(-10px); }
-}
-@keyframes levelupSparkle { from { opacity: 0; transform: scale(.2) rotate(0); } 35% { opacity: 1; } to { opacity: 0; transform: scale(1.6) rotate(70deg); } }
-@keyframes levelupFade { 0%, 76% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .task-levelup, .task-levelup-card, .task-levelup-sparkle { animation-duration: .01ms; }
-  .task-levelup-sparkle { display: none; }
+  .task-fireworks { display: none; }
 }
 
 .section-label {

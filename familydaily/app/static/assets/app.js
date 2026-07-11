@@ -242,25 +242,20 @@ function playSynthTaskLevelUpSound() {
   } catch (e) { /* Ton ist optional, z. B. bei stumm geschaltetem Gerät. */ }
 }
 
-function showTaskLevelUp(task) {
-  document.querySelector(".task-levelup")?.remove();
-  const sparkles = Array.from({ length: 10 }, (_, i) => el("span", {
-    class: "task-levelup-sparkle",
-    style: `--x:${8 + ((i * 29) % 84)}%;--y:${5 + ((i * 41) % 88)}%;--delay:${i * 55}ms`,
-  }, "✦"));
-  const popup = el("div", { class: "task-levelup", role: "status", "aria-live": "polite" },
-    ...sparkles,
-    el("div", { class: "task-levelup-card" },
-      el("div", { class: "task-levelup-icon" }, icon("check", 32)),
-      el("p", { class: "task-levelup-kicker" }, "AUFGABE ERLEDIGT"),
-      el("p", { class: "task-levelup-title" }, task.title),
-      el("p", { class: "task-levelup-subtitle" }, "+1 Familien-XP")
+function showTaskFireworks() {
+  document.querySelector(".task-fireworks")?.remove();
+  const colors = ["#ffcf4a", "#ff725c", "#7fc8ff", "#8bd17c", "#d99cff"];
+  const bursts = [[25, 38, 0], [72, 28, 180], [52, 62, 360]].map(([x, y, delay], burstIndex) =>
+    el("span", { class: "firework-burst", style: `--x:${x}%;--y:${y}%;--delay:${delay}ms` },
+      ...Array.from({ length: 12 }, (_, i) => el("i", {
+        style: `--angle:${i * 30}deg;--distance:${46 + (i % 3) * 12}px;--color:${colors[(i + burstIndex) % colors.length]}`,
+      }))
     )
   );
-  document.body.appendChild(popup);
+  const fireworks = el("div", { class: "task-fireworks", "aria-hidden": "true" }, ...bursts);
+  document.body.appendChild(fireworks);
   navigator.vibrate?.(35);
-  setTimeout(() => popup.classList.add("leaving"), 1450);
-  setTimeout(() => popup.remove(), 1750);
+  setTimeout(() => fireworks.remove(), 1500);
 }
 
 function toggleTaskDone(task, event) {
@@ -269,7 +264,7 @@ function toggleTaskDone(task, event) {
   if (completing) playTaskLevelUpSound();
   api.patch(`api/tasks/${task.id}`, { done: completing }).then((res) => {
     if (res?.detail || res?.error) { toast(res.detail || res.error); return; }
-    if (completing) showTaskLevelUp(task);
+    if (completing) showTaskFireworks();
     render();
   }).catch(() => toast("Aufgabe konnte nicht aktualisiert werden"));
 }
