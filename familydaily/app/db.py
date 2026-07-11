@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS task_template (
     recurrence TEXT NOT NULL DEFAULT 'none',
     recurrence_param INTEGER,
     start_date TEXT,
+    end_date TEXT,
     active INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS task (
@@ -94,6 +95,8 @@ async def _migrate(db: aiosqlite.Connection) -> None:
             "(SELECT MIN(due_date) FROM task WHERE task.template_id = task_template.id), "
             "date('now'))"
         )
+    if "end_date" not in template_cols:
+        await db.execute("ALTER TABLE task_template ADD COLUMN end_date TEXT")
     # task: bewusst verworfene Einzelvorkommen wiederkehrender Aufgaben ausblenden,
     # ohne dass die Materialisierung sie beim nächsten Laden erneut anlegt.
     cur = await db.execute("PRAGMA table_info(task)")

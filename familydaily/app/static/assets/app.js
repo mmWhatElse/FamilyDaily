@@ -1343,7 +1343,8 @@ async function openSeriesManager(persons) {
     el("div", { class: "series-main" },
       el("span", { class: "series-title" }, s.title),
       el("span", { class: "series-meta" },
-        `${RECUR_LABEL[s.recurrence]} · ${s.active ? `nächste: ${fmtDate(s.next_due)}` : "pausiert"}`),
+        `${RECUR_LABEL[s.recurrence]} · ${s.active ? (s.next_due ? `nächste: ${fmtDate(s.next_due)}` : "beendet") : "pausiert"}`
+          + (s.end_date ? ` · bis ${fmtDate(s.end_date)}` : "")),
       el("span", { class: "series-people" }, ...(s.person_ids || []).map((id) => {
         const p = personMap[id];
         return p ? el("span", { class: "person-pip person-pip--sm", style: `background:${p.color}` }, p.emoji || p.name[0]) : null;
@@ -1381,6 +1382,7 @@ function openSeriesForm(series, persons) {
   }});
   const titleInput = el("input", { class: "form-input", value: series.title });
   const dateInput = el("input", { type: "date", class: "form-input", value: series.start_date || isoDate() });
+  const endDateInput = el("input", { type: "date", class: "form-input", value: series.end_date || "" });
   const recurrence = el("select", { class: "form-input" },
     el("option", { value: "daily" }, "Täglich"),
     el("option", { value: "weekly" }, "Wöchentlich"),
@@ -1397,6 +1399,7 @@ function openSeriesForm(series, persons) {
     el("p", { class: "form-field-label" }, "Titel"), titleInput,
     el("p", { class: "form-field-label" }, "Rhythmus"), recurrence,
     el("p", { class: "form-field-label" }, "Start / Wochentag"), dateInput,
+    el("p", { class: "form-field-label" }, "Endet am (optional)"), endDateInput,
     ...checks,
     el("div", { class: "form-btns" },
       el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
@@ -1404,7 +1407,7 @@ function openSeriesForm(series, persons) {
         const person_ids = [...overlay.querySelectorAll("input[type=checkbox]:checked")].map((cb) => Number(cb.value));
         await api.patch(`api/tasks/series/${series.id}`, {
           title: titleInput.value.trim(), recurrence: recurrence.value,
-          start_date: dateInput.value, person_ids,
+          start_date: dateInput.value, end_date: endDateInput.value || null, person_ids,
         });
         overlay.remove(); render();
       }}, "Speichern")
@@ -1427,6 +1430,14 @@ function openTaskForm(persons, existing = null) {
   );
   recurSel.value = existing?.recurrence || "none";
   recurSel.disabled = isEdit;
+  const endDateInput = el("input", { type: "date", class: "form-input" });
+  const endDateField = el("div", { class: "task-end-field" },
+    el("p", { class: "form-field-label" }, "Endet am (optional)"), endDateInput);
+  const syncEndDateVisibility = () => {
+    endDateField.style.display = !isEdit && recurSel.value !== "none" ? "" : "none";
+  };
+  recurSel.addEventListener("change", syncEndDateVisibility);
+  syncEndDateVisibility();
   const existingPersonIds = new Set(existing?.person_ids || []);
   const personChecks = persons.map((p) => {
     const checkbox = el("input", { type: "checkbox", value: String(p.id) });
@@ -1447,6 +1458,7 @@ function openTaskForm(persons, existing = null) {
     dateInput,
     el("p", { class: "form-field-label" }, "Wiederholung"),
     recurSel,
+    endDateField,
     persons.length ? el("p", { class: "form-field-label" }, "Zugewiesen an") : null,
     ...personChecks,
     errMsg,
@@ -1459,7 +1471,11 @@ function openTaskForm(persons, existing = null) {
           .map((cb) => parseInt(cb.value));
         const res = isEdit
           ? await api.patch(`api/tasks/${existing.id}`, { title, person_ids, due_date: dateInput.value || null })
-          : await api.post("api/tasks", { title, person_ids, due_date: dateInput.value || null, recurrence: recurSel.value });
+          : await api.post("api/tasks", {
+              title, person_ids, due_date: dateInput.value || null,
+              recurrence: recurSel.value,
+              end_date: recurSel.value === "none" ? null : (endDateInput.value || null),
+            });
         if (res && res.detail) { errMsg.textContent = res.detail; errMsg.style.display = ""; return; }
         overlay.remove();
         render();

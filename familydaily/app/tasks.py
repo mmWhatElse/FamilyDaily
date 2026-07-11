@@ -20,6 +20,7 @@ class TaskIn(BaseModel):
     person_ids: list[int] = []
     due_date: str | None = None  # ISO date
     recurrence: str = "none"
+    end_date: str | None = None
 
 
 class TaskPatch(BaseModel):
@@ -34,6 +35,7 @@ class SeriesPatch(BaseModel):
     person_ids: list[int] | None = None
     recurrence: str | None = None
     start_date: str | None = None
+    end_date: str | None = None
     active: bool | None = None
 
 
@@ -75,6 +77,8 @@ async def _materialize(db, target: date | None = None) -> None:
     for tpl in await cur.fetchall():
         start = date.fromisoformat(tpl["start_date"]) if tpl["start_date"] else None
         due = _current_due(tpl["recurrence"], tpl["recurrence_param"] or 0, today, start)
+        if tpl["end_date"] and due > date.fromisoformat(tpl["end_date"]):
+            continue
         if due > today:
             continue  # this period's occurrence hasn't arrived yet
         cur2 = await db.execute(
@@ -102,9 +106,13 @@ def _series_row(r, today: date | None = None) -> dict:
     d["active"] = bool(d["active"])
     if d["active"]:
         start = date.fromisoformat(d["start_date"]) if d["start_date"] else None
-        d["next_due"] = _next_due(
+        next_due = _next_due(
             d["recurrence"], d["recurrence_param"] or 0, today or date.today(), start
-        ).isoformat()
+        )
+        d["next_due"] = (
+            None if d["end_date"] and next_due > date.fromisoformat(d["end_date"])
+            else next_due.isoformat()
+        )
     else:
         d["next_due"] = None
     return d
@@ -144,22 +152,29 @@ async def patch_series(series_id: int, data: SeriesPatch):
         if data.start_date is not None:
             date.fromisoformat(data.start_date)
             values["start_date"] = data.start_date
+        if "end_date" in data.model_fields_set:
+            if data.end_date:
+                date.fromisoformat(data.end_date)
+            values["end_date"] = data.end_date
         base = date.fromisoformat(values["start_date"]) if values["start_date"] else date.today()
+        if values["end_date"] and date.fromisoformat(values["end_date"]) < base:
+            raise HTTPException(422, "Enddatum darf nicht vor dem Startdatum liegen")
         values["recurrence_param"] = base.weekday() if values["recurrence"] == "weekly" else base.day
         if data.active is not None:
             values["active"] = int(data.active)
         await db.execute(
             "UPDATE task_template SET title=?, person_ids=?, recurrence=?, recurrence_param=?, "
-            "start_date=?, active=? WHERE id=?",
+            "start_date=?, end_date=?, active=? WHERE id=?",
             (values["title"], values["person_ids"], values["recurrence"],
-             values["recurrence_param"], values["start_date"], values["active"], series_id),
+             values["recurrence_param"], values["start_date"], values["end_date"],
+             values["active"], series_id),
         )
         if data.title is not None or data.person_ids is not None:
             await db.execute(
                 "UPDATE task SET title=?, person_ids=? WHERE template_id=? AND done=0 AND skipped=0",
                 (values["title"], values["person_ids"], series_id),
             )
-        if data.recurrence is not None or data.start_date is not None:
+        if data.recurrence is not None or data.start_date is not None or "end_date" in data.model_fields_set:
             await db.execute(
                 "DELETE FROM task WHERE template_id=? AND done=0 AND skipped=0 AND due_date>=?",
                 (series_id, date.today().isoformat()),
@@ -252,11 +267,13 @@ async def create_task(data: TaskIn):
             new_id = cur.lastrowid
         else:
             base = date.fromisoformat(data.due_date) if data.due_date else date.today()
+            if data.end_date and date.fromisoformat(data.end_date) < base:
+                raise HTTPException(422, "Enddatum darf nicht vor dem Startdatum liegen")
             param = base.weekday() if data.recurrence == "weekly" else base.day
             cur = await db.execute(
-                "INSERT INTO task_template (title, person_ids, recurrence, recurrence_param, start_date) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (title, person_ids, data.recurrence, param, base.isoformat()),
+                "INSERT INTO task_template (title, person_ids, recurrence, recurrence_param, start_date, end_date) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (title, person_ids, data.recurrence, param, base.isoformat(), data.end_date),
             )
             await db.commit()
             await _materialize(db)

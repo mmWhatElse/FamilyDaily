@@ -96,6 +96,32 @@ class RecurringTaskDeleteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(preview), 1)
         self.assertEqual(preview[0]["due_date"], tomorrow)
 
+    async def test_daily_series_stops_after_inclusive_end_date(self):
+        tomorrow = date.today() + timedelta(days=1)
+        await tasks.create_task(tasks.TaskIn(
+            title="Monatsroutine", recurrence="daily", end_date=tomorrow.isoformat()
+        ))
+
+        on_end = await tasks.preview_tasks(tomorrow.isoformat())
+        after_end = await tasks.preview_tasks((tomorrow + timedelta(days=1)).isoformat())
+
+        self.assertEqual(len(on_end), 1)
+        self.assertEqual(after_end, [])
+        series = await tasks.get_series()
+        self.assertEqual(series[0]["end_date"], tomorrow.isoformat())
+
+    async def test_end_date_can_be_removed_from_series(self):
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        await tasks.create_task(tasks.TaskIn(
+            title="Begrenzt", recurrence="daily", end_date=tomorrow
+        ))
+        series_id = (await tasks.get_series())[0]["id"]
+
+        await tasks.patch_series(series_id, tasks.SeriesPatch(end_date=None))
+
+        series = await tasks.get_series()
+        self.assertIsNone(series[0]["end_date"])
+
     async def test_legacy_series_gets_start_date_during_migration(self):
         db_module.DB_PATH.unlink()
         async with aiosqlite.connect(db_module.DB_PATH) as legacy:
@@ -124,6 +150,10 @@ class RecurringTaskDeleteTests(unittest.IsolatedAsyncioTestCase):
                 "SELECT start_date FROM task_template WHERE id = 1"
             )).fetchone()
             self.assertEqual(row["start_date"], "2026-07-08")
+            cols = [r[1] for r in await (await db.execute(
+                "PRAGMA table_info(task_template)"
+            )).fetchall()]
+            self.assertIn("end_date", cols)
         finally:
             await db.close()
 

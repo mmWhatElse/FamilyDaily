@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.20.1] - 2026-07-11
+
+### Neu
+- **Optionales Enddatum für Aufgabenserien**: Tägliche, wöchentliche und monatliche Aufgaben können beim Anlegen ein inklusives Enddatum erhalten. Damit lässt sich beispielsweise eine tägliche Aufgabe genau für einen Monat planen.
+- Das Enddatum kann in „Wiederholungen verwalten“ nachträglich geändert oder entfernt werden. Die Übersicht zeigt „bis …“ und nach Ablauf „beendet“.
+
+### Technik
+- Eine automatische Datenbankmigration ergänzt `end_date`; bestehende Serien bleiben unbegrenzt.
+- Materialisierung und Morgen-Vorschau erzeugen nach dem Enddatum keine Aufgaben mehr.
+- Acht Backend- und Migrationstests decken den inklusiven letzten Tag, den Folgetag und das Entfernen des Enddatums ab.
+
+---
+
 ## [0.20.0] - 2026-07-11
 
 ### Neu
