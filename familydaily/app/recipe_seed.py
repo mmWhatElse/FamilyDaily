@@ -1,0 +1,28 @@
+"""Starter recipes based on the supplied 1,800 kcal meal-plan building blocks."""
+
+RECIPES = [
+    ("Skyr-Beeren-Bowl", "breakfast", 400, 35, ["300 g Skyr natur", "40 g Haferflocken", "150 g Beeren", "10 g Mandeln", "Zimt oder Süßstoff"]),
+    ("Overnight Oats", "breakfast", 420, 29, ["200 g Skyr oder griechischer Joghurt light", "40 g Haferflocken", "100 ml fettarme Milch", "1 kleiner Apfel", "10 g Nüsse", "Zimt"]),
+    ("Herzhaftes Eierbrot", "breakfast", 430, 29, ["2 Eier", "2 Scheiben Vollkornbrot (ca. 100 g)", "100 g körniger Frischkäse", "Tomaten, Gurken oder Radieschen"]),
+    ("Topfencreme mit Banane", "breakfast", 400, 36, ["250 g Magertopfen", "etwas Mineralwasser oder Milch", "1 kleine Banane", "20 g Haferflocken", "10 g Erdnussmus", "Zimt oder Backkakao"]),
+    ("Protein-Pancakes mit Topfen", "breakfast", 430, 35, ["1 Ei", "150 g Magertopfen", "40 g Haferflocken oder Hafermehl", "1 kleine Banane", "Backpulver und Zimt", "100 g Beeren"]),
+    ("Baked Oats Apfel-Zimt", "breakfast", 420, 29, ["50 g Haferflocken", "150 g Skyr", "1 Ei", "1 kleiner Apfel", "Zimt und Backpulver"]),
+    ("Hähnchen-Reis-Gemüse-Box", "main", 560, 48, ["160 g Hähnchenbrust", "70 g Reis (Trockengewicht)", "300 g Zucchini, Karotten, Erbsen oder grüne Bohnen", "1 TL Öl", "Sojasauce oder Gewürze"]),
+    ("Chili con Carne", "main", 570, 43, ["150 g mageres Rinderfaschiertes", "150 g Kidneybohnen", "Dosentomaten", "etwas Mais", "1 Zwiebel", "50 g Reis (Trockengewicht)", "Gewürze"]),
+    ("Vollkornnudeln mit Bolognese", "main", 580, 44, ["75 g Vollkornnudeln", "150 g mageres Rinderfaschiertes", "Passierte Tomaten", "Karotten, Zucchini und Zwiebel", "10 g Parmesan"]),
+    ("Mediterrane Hähnchen-Bowl", "main", 560, 46, ["160 g Hähnchenbrust", "60 g Couscous oder Bulgur", "Zucchini, Aubergine, Tomaten und rote Zwiebel", "30 g Feta", "1 TL Olivenöl"]),
+    ("Rote-Linsen-Dal light", "main", 540, 27, ["80 g rote Linsen", "50 g Reis", "Karotten, Zucchini, Tomaten und Spinat", "Brühe und Currygewürze", "50 g Joghurt"]),
+    ("Puten-Gyros mit Tzatziki", "main", 570, 49, ["170 g Putenbrust", "300 g Kartoffelspalten", "Gurke, Tomate, Zwiebel und Salat", "120 g Joghurt-Tzatziki", "1 TL Öl"]),
+    ("Ofenkartoffeln mit Kräutertopfen", "main", 530, 38, ["400 g Kartoffeln", "250 g Magertopfen", "etwas Joghurt oder Mineralwasser", "Kräuter, Salz und Knoblauch", "Gurken-, Tomaten- oder Blattsalat"]),
+    ("Hähnchen-Wraps", "main", 550, 48, ["2 kleine Wraps", "150 g Hähnchen", "Salat, Gurke und Tomate", "50 g Joghurtsauce", "30 g Käse"]),
+    ("Gebratener Reis mit Ei und Hähnchen", "main", 570, 45, ["60 g Reis", "120 g Hähnchen", "2 Eier", "250 g Erbsen, Karotten, Zucchini oder Bohnen", "Sojasauce", "1 TL Öl"]),
+    ("Proteinreiche Jause", "main", 500, 43, ["2 Scheiben Vollkornbrot", "100 g körniger Frischkäse", "80 g Schinken oder Putenbrust", "1 gekochtes Ei", "Gurken, Tomaten und Radieschen"]),
+    ("Wrap-Pizza", "main", 530, 42, ["2 kleine Vollkorn-Wraps oder 1 großer Wrap", "Tomatensauce", "100 g Hähnchen, Schinken oder Putenbrust", "80 g Mozzarella light", "Champignons, Zucchini, Mais oder Zwiebel"]),
+    ("Kumpir light", "main", 550, 36, ["400 g Ofenkartoffel", "150 g körniger Frischkäse oder Skyr", "80 g Hähnchen oder Putenbrust", "Mais, Gurke, Tomate und Frühlingszwiebel", "20 g Käse"]),
+    ("Skyr mit Beeren", "snack", 190, 27, ["250 g Skyr", "Beeren nach Geschmack"]),
+    ("Apfel und Mandeln", "snack", 210, 4, ["1 Apfel", "20 g Mandeln"]),
+    ("Karotten mit Hummus", "snack", 200, 5, ["Karotten", "50 g Hummus"]),
+    ("Schoko-Joghurt-Fudge", "snack", 170, 15, ["150 g Skyr", "15 g Zartbitterschokolade"]),
+    ("Protein-Käsekuchen im Glas", "snack", 220, 25, ["200 g Magertopfen", "50 g Skyr", "Zitronensaft, Vanille und Süßstoff", "10 g Butterkeks oder Haferflocken"]),
+    ("Protein-Eis", "snack", 180, 22, ["200 g Skyr", "150 g gefrorene Beeren", "Süßstoff", "ein Schluck Milch"]),
+]

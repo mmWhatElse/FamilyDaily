@@ -16,6 +16,7 @@ from .meals import router as meals_router
 from .notifications import notification_loop
 from .notifications import router as notifications_router
 from .persons import router as persons_router
+from .recipes import router as recipes_router
 from .shopping import router as shopping_router
 from .tasks import router as tasks_router
 from .ws import broadcaster
@@ -40,6 +41,7 @@ app.include_router(tasks_router)
 app.include_router(persons_router)
 app.include_router(calendar_router)
 app.include_router(meals_router)
+app.include_router(recipes_router)
 app.include_router(notifications_router)
 
 

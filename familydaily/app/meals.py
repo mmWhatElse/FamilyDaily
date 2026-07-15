@@ -1,4 +1,4 @@
-"""Mahlzeiten — one dinner entry per day."""
+"""Weekly meal plan with one entry per category and day."""
 
 import json
 from datetime import date, timedelta
@@ -14,9 +14,15 @@ router = APIRouter(prefix="/api/meals", tags=["meals"])
 
 class MealIn(BaseModel):
     title: str
+    category: str = "dinner"
     note: str | None = None
     url: str | None = None
     ingredients: list[str] | None = None
+    calories: int | None = None
+    recipe_id: int | None = None
+
+
+CATEGORIES = {"breakfast", "lunch", "dinner", "snack"}
 
 
 def _row_to_meal(r) -> dict:
@@ -34,13 +40,19 @@ def _clean_ingredients(items: list[str] | None) -> str | None:
 
 
 @router.get("")
-async def get_meals(start: str, end: str):
+async def get_meals(start: str, end: str, category: str | None = None):
     db = await open_db()
     try:
-        cur = await db.execute(
-            "SELECT * FROM meal WHERE date >= ? AND date <= ? ORDER BY date",
-            (start, end),
-        )
+        if category:
+            cur = await db.execute(
+                "SELECT * FROM meal WHERE date >= ? AND date <= ? AND category = ? ORDER BY date",
+                (start, end, category),
+            )
+        else:
+            cur = await db.execute(
+                "SELECT * FROM meal WHERE date >= ? AND date <= ? ORDER BY date, category",
+                (start, end),
+            )
         return [_row_to_meal(r) for r in await cur.fetchall()]
     finally:
         await db.close()
@@ -75,14 +87,21 @@ async def set_meal(day: str, data: MealIn):
     title = data.title.strip()
     if not title:
         raise HTTPException(422, "Titel darf nicht leer sein")
+    category = data.category.strip().lower()
+    if category not in CATEGORIES:
+        raise HTTPException(422, "Unbekannte Mahlzeit-Kategorie")
     db = await open_db()
     try:
         await db.execute(
-            """INSERT INTO meal (date, title, note, url, ingredients) VALUES (?, ?, ?, ?, ?)
-               ON CONFLICT(date) DO UPDATE SET
+            """INSERT INTO meal
+                 (date, category, title, note, url, ingredients, calories, recipe_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(date, category) DO UPDATE SET
                  title = excluded.title, note = excluded.note, url = excluded.url,
-                 ingredients = excluded.ingredients""",
-            (day, title, data.note, data.url, _clean_ingredients(data.ingredients)),
+                 ingredients = excluded.ingredients, calories = excluded.calories,
+                 recipe_id = excluded.recipe_id""",
+            (day, category, title, data.note, data.url,
+             _clean_ingredients(data.ingredients), data.calories, data.recipe_id),
         )
         await db.commit()
         await broadcaster.broadcast({"type": "meals"})
@@ -92,10 +111,10 @@ async def set_meal(day: str, data: MealIn):
 
 
 @router.delete("/{day}", status_code=204)
-async def delete_meal(day: str):
+async def delete_meal(day: str, category: str = "dinner"):
     db = await open_db()
     try:
-        await db.execute("DELETE FROM meal WHERE date = ?", (day,))
+        await db.execute("DELETE FROM meal WHERE date = ? AND category = ?", (day, category))
         await db.commit()
         await broadcaster.broadcast({"type": "meals"})
     finally:
@@ -113,17 +132,21 @@ async def copy_last_week():
             target = monday + timedelta(days=offset)
             source = target - timedelta(days=7)
             cur = await db.execute("SELECT * FROM meal WHERE date = ?", (source.isoformat(),))
-            src = await cur.fetchone()
-            if not src:
-                continue
-            cur = await db.execute("SELECT 1 FROM meal WHERE date = ?", (target.isoformat(),))
-            if await cur.fetchone():
-                continue
-            await db.execute(
-                "INSERT INTO meal (date, title, note, url, ingredients) VALUES (?, ?, ?, ?, ?)",
-                (target.isoformat(), src["title"], src["note"], src["url"], src["ingredients"]),
-            )
-            copied += 1
+            for src in await cur.fetchall():
+                cur = await db.execute(
+                    "SELECT 1 FROM meal WHERE date = ? AND category = ?",
+                    (target.isoformat(), src["category"]),
+                )
+                if await cur.fetchone():
+                    continue
+                await db.execute(
+                    """INSERT INTO meal
+                       (date, category, title, note, url, ingredients, calories, recipe_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (target.isoformat(), src["category"], src["title"], src["note"],
+                     src["url"], src["ingredients"], src["calories"], src["recipe_id"]),
+                )
+                copied += 1
         await db.commit()
         await broadcaster.broadcast({"type": "meals"})
         return {"copied": copied}

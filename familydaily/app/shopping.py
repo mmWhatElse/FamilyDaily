@@ -27,6 +27,10 @@ class ItemPatch(BaseModel):
     checked: bool | None = None
 
 
+class ItemBulkIn(BaseModel):
+    names: list[str]
+
+
 async def _notify(list_id: int) -> None:
     await broadcaster.broadcast({"type": "shopping", "list_id": list_id})
 
@@ -132,6 +136,46 @@ async def add_item(list_id: int, data: ItemIn):
         await db.commit()
         await _notify(list_id)
         return {"id": cur.lastrowid, "name": name, "category": category}
+    finally:
+        await db.close()
+
+
+@router.post("/lists/{list_id}/items/bulk")
+async def add_items_bulk(list_id: int, data: ItemBulkIn):
+    """Add a recipe's ingredients in one request; open duplicates are skipped."""
+    names = list(dict.fromkeys(name.strip() for name in data.names if name.strip()))
+    db = await open_db()
+    try:
+        if not await (await db.execute(
+            "SELECT id FROM shopping_list WHERE id = ?", (list_id,)
+        )).fetchone():
+            raise HTTPException(404, "Liste nicht gefunden")
+        added = 0
+        for name in names:
+            existing = await (await db.execute(
+                "SELECT id FROM shopping_item WHERE list_id = ? AND checked = 0 AND name = ? COLLATE NOCASE",
+                (list_id, name),
+            )).fetchone()
+            if existing:
+                continue
+            history = await (await db.execute(
+                "SELECT category FROM item_history WHERE name = ? COLLATE NOCASE", (name,)
+            )).fetchone()
+            category = history["category"] if history else None
+            await db.execute(
+                "INSERT INTO shopping_item (list_id, name, category) VALUES (?, ?, ?)",
+                (list_id, name, category),
+            )
+            await db.execute(
+                """INSERT INTO item_history (name, category, use_count) VALUES (?, ?, 1)
+                   ON CONFLICT(name) DO UPDATE SET use_count = use_count + 1""",
+                (name, category),
+            )
+            added += 1
+        await db.commit()
+        if added:
+            await _notify(list_id)
+        return {"added": added, "total": len(names)}
     finally:
         await db.close()
 

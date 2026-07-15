@@ -6,7 +6,7 @@ Einkaufslisten und Essensplan. Komplett lokal, kein Cloud-Konto, keine Anmeldung
 
 Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht. 
 
-**Version 0.20.1**
+**Version 0.21.0**
 
 ## Funktionen
 
@@ -16,7 +16,7 @@ Erstellt mit Claude als Privatprojekt, work-in-progress solange es Spass macht.
 | **Kalender** | 14-Tage-Liste und Terminübersicht aus HA-Kalendern; mehrtägige Termine zusätzlich als durchgehende Zeitspannen; Termine anlegen, bearbeiten, löschen und Personen zuordnen |
 | **Aufgaben** | Aufgaben mit Person, Fälligkeit und zeitlich begrenzbarer Wiederholung; Serien zentral bearbeiten, pausieren, fortsetzen oder löschen; fünf Sekunden Undo nach Abhaken und Löschen – ebenso bei Terminen, Einkäufen und Essen |
 | **Listen** | Mehrere Einkaufslisten, Autovervollständigung, Live-Sync zwischen Geräten; Kategorien mit Gruppierung in Supermarkt-Reihenfolge — einmal zugeordnet, landen Artikel künftig automatisch richtig |
-| **Essen** | Wochenplan Abendessen mit Zutaten pro Gericht: Zutaten vom letzten Mal werden übernommen, ein Tap setzt alles auf die Einkaufsliste; letzte Woche kopieren |
+| **Essen** | Wochenplan für Frühstück, Mittag, Abendessen und Snacks plus editierbare Rezeptbox mit Kalorien und Mengen; Rezepte direkt einplanen oder alle Zutaten mit einem Tap auf die Einkaufsliste setzen |
 | **Einstellungen** | Kalender auswählen & einfärben, Familienmitglieder, Benachrichtigungen, helles/dunkles Design |
 | **Benachrichtigungen** | Push-Erinnerungen an mehrere Geräte über HA Companion App |
 

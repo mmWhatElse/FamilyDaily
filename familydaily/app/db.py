@@ -1,6 +1,7 @@
 """SQLite helpers for FamilyDaily."""
 
 import os
+import json
 from pathlib import Path
 
 import aiosqlite
@@ -54,13 +55,28 @@ CREATE TABLE IF NOT EXISTS task (
     done INTEGER NOT NULL DEFAULT 0,
     completed_at TEXT
 );
+CREATE TABLE IF NOT EXISTS recipe (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    calories INTEGER NOT NULL,
+    protein INTEGER,
+    ingredients TEXT NOT NULL DEFAULT '[]',
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS meal (
     id INTEGER PRIMARY KEY,
-    date TEXT NOT NULL UNIQUE,
+    date TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'dinner',
     title TEXT NOT NULL,
     note TEXT,
     url TEXT,
-    ingredients TEXT
+    ingredients TEXT,
+    calories INTEGER,
+    recipe_id INTEGER REFERENCES recipe(id) ON DELETE SET NULL,
+    UNIQUE(date, category)
 );
 CREATE TABLE IF NOT EXISTS notification_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -86,6 +102,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 
 async def _migrate(db: aiosqlite.Connection) -> None:
+    # Mittag und Abend sind in der Rezeptbox dieselbe Art Hauptgericht.
+    await db.execute(
+        "UPDATE recipe SET category = 'main' WHERE category IN ('lunch', 'dinner')"
+    )
     cur = await db.execute("PRAGMA table_info(task_template)")
     template_cols = [r[1] for r in await cur.fetchall()]
     if "start_date" not in template_cols:
@@ -115,11 +135,35 @@ async def _migrate(db: aiosqlite.Connection) -> None:
             "UPDATE notification_settings SET notify_services = json_array(notify_service) "
             "WHERE notify_service != ''"
         )
-    # meal: Zutaten als JSON-Liste
+    # meal: legacy one-dinner-per-day table -> four meal slots per day
     cur = await db.execute("PRAGMA table_info(meal)")
     cols = [r[1] for r in await cur.fetchall()]
-    if "ingredients" not in cols:
-        await db.execute("ALTER TABLE meal ADD COLUMN ingredients TEXT")
+    if "category" not in cols:
+        await db.execute("ALTER TABLE meal RENAME TO meal_legacy")
+        await db.execute("""CREATE TABLE meal (
+            id INTEGER PRIMARY KEY,
+            date TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'dinner',
+            title TEXT NOT NULL,
+            note TEXT,
+            url TEXT,
+            ingredients TEXT,
+            calories INTEGER,
+            recipe_id INTEGER REFERENCES recipe(id) ON DELETE SET NULL,
+            UNIQUE(date, category)
+        )""")
+        legacy_cols = set(cols)
+        ingredients_expr = "ingredients" if "ingredients" in legacy_cols else "NULL"
+        await db.execute(
+            "INSERT INTO meal (id, date, category, title, note, url, ingredients) "
+            f"SELECT id, date, 'dinner', title, note, url, {ingredients_expr} FROM meal_legacy"
+        )
+        await db.execute("DROP TABLE meal_legacy")
+    else:
+        if "calories" not in cols:
+            await db.execute("ALTER TABLE meal ADD COLUMN calories INTEGER")
+        if "recipe_id" not in cols:
+            await db.execute("ALTER TABLE meal ADD COLUMN recipe_id INTEGER REFERENCES recipe(id) ON DELETE SET NULL")
     # calendar_settings aus den alten Person↔Kalender-Zuordnungen befüllen
     cur = await db.execute("SELECT COUNT(*) FROM calendar_settings")
     (count,) = await cur.fetchone()
@@ -146,6 +190,15 @@ async def init_db() -> None:
         if count == 0:
             await db.execute(
                 "INSERT INTO shopping_list (name, icon, sort_order) VALUES ('Supermarkt', '🛒', 0)"
+            )
+        cur = await db.execute("SELECT COUNT(*) FROM recipe")
+        (count,) = await cur.fetchone()
+        if count == 0:
+            from .recipe_seed import RECIPES
+            await db.executemany(
+                "INSERT INTO recipe (name, category, calories, protein, ingredients) VALUES (?, ?, ?, ?, ?)",
+                [(name, category, calories, protein, json.dumps(ingredients, ensure_ascii=False))
+                 for name, category, calories, protein, ingredients in RECIPES],
             )
         await db.commit()
 

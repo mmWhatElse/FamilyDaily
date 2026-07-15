@@ -1,7 +1,11 @@
 /* FamilyDaily SPA — no build step, plain JS. */
 
 const $main = document.getElementById("view");
-const state = { tab: "heute", listId: null, listName: "", calOffset: 0, calView: "range", agendaYears: 1, taskFilter: null };
+const state = {
+  tab: "heute", listId: null, listName: "", calOffset: 0, calView: "range",
+  agendaYears: 1, taskFilter: null, foodView: "plan", mealCategory: "dinner",
+  recipeCategory: "all",
+};
 const pendingTaskDeletes = new Set();
 const pendingEventDeletes = new Set();
 const pendingShoppingDeletes = new Set();
@@ -153,6 +157,12 @@ function weekMonday() {
 
 const DAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const RECUR_LABEL = { daily: "täglich", weekly: "wöchentlich", monthly: "monatlich" };
+const MEAL_CATEGORIES = {
+  breakfast: "Frühstück", lunch: "Mittag", dinner: "Abend", snack: "Snacks",
+};
+const RECIPE_CATEGORIES = {
+  breakfast: "Frühstück", main: "Hauptgerichte", snack: "Snacks",
+};
 
 /* Einkaufs-Kategorien in Supermarkt-Reihenfolge */
 const CATEGORIES = [
@@ -384,14 +394,17 @@ function scheduleShoppingDelete(item) {
   });
 }
 
-function scheduleMealDelete(day) {
-  pendingMealDeletes.add(day);
+function mealDeleteKey(day, category = "dinner") { return `${day}:${category}`; }
+
+function scheduleMealDelete(day, category = "dinner") {
+  const key = mealDeleteKey(day, category);
+  pendingMealDeletes.add(key);
   render();
   offerUndo("Essen wird gelöscht", () => {
-    pendingMealDeletes.delete(day); render();
+    pendingMealDeletes.delete(key); render();
   }, async () => {
-    await api.del(`api/meals/${day}`);
-    pendingMealDeletes.delete(day); render();
+    await api.del(`api/meals/${day}?category=${encodeURIComponent(category)}`);
+    pendingMealDeletes.delete(key); render();
   });
 }
 
@@ -400,11 +413,11 @@ async function ingredientsToList(meal) {
   const lists = await api.get("api/shopping/lists").catch(() => []);
   if (!lists.length) { toast("Keine Einkaufsliste vorhanden"); return false; }
   const target = lists[0];
-  let added = 0;
-  for (const name of meal.ingredients || []) {
-    const res = await api.post(`api/shopping/lists/${target.id}/items`, { name }).catch(() => null);
-    if (res && !res.duplicate) added++;
-  }
+  const result = await api.post(`api/shopping/lists/${target.id}/items/bulk`, {
+    names: meal.ingredients || [],
+  }).catch(() => null);
+  if (!result) { toast("Zutaten konnten nicht hinzugefügt werden"); return false; }
+  const added = result.added || 0;
   toast(added
     ? `${added} Zutat${added === 1 ? "" : "en"} auf „${target.name}“ gesetzt`
     : "Alles schon auf der Liste");
@@ -468,7 +481,7 @@ function connectWs() {
       (msg.type === "shopping" && (t === "listen" || t === "heute")) ||
       (msg.type === "tasks"    && (t === "aufgaben" || t === "heute")) ||
       (msg.type === "calendar" && (t === "kalender" || t === "heute")) ||
-      (msg.type === "meals"    && (t === "essen" || t === "heute")) ||
+      ((msg.type === "meals" || msg.type === "recipes") && (t === "essen" || t === "heute")) ||
       (msg.type === "persons"  && t === "einstellungen")
     ) render();
   };
@@ -503,7 +516,7 @@ async function viewHeute() {
     api.get(`api/calendar/events?start=${tomorrow}T00:00:00&end=${day30}T00:00:00`).catch(() => null),
     api.get(`api/tasks/preview?target=${tomorrow}`).catch(() => []),
     api.get(`api/calendar/events?start=${tomorrow}T00:00:00&end=${dayAfterTomorrow}T00:00:00`).catch(() => []),
-    api.get(`api/meals?start=${tomorrow}&end=${tomorrow}`).catch(() => []),
+    api.get(`api/meals?start=${tomorrow}&end=${tomorrow}&category=dinner`).catch(() => []),
   ]);
   const visibleTasks = tasks.filter((t) => !pendingTaskDeletes.has(t.id));
   const visibleWeekTasks = weekTasks.filter((t) => !pendingTaskDeletes.has(t.id));
@@ -547,7 +560,7 @@ async function viewHeute() {
     return s <= today && (ev.all_day ? today < e : today <= e);
   }) : null;
 
-  const weekMealMap = Object.fromEntries(weekMeals.map((m) => [m.date, m]));
+  const weekMealMap = Object.fromEntries(weekMeals.filter((m) => m.category === "dinner").map((m) => [m.date, m]));
   const weekTaskMap = {};
   visibleWeekTasks.forEach((t) => {
     if (t.due_date && !t.done) {
@@ -1634,14 +1647,19 @@ function openCategoryPicker(item) {
 /* ---------- Essen ---------- */
 
 async function viewEssen() {
+  if (state.foodView === "recipes") return viewRecipes();
+
   const mon = weekMonday();
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
   const start = isoDate(mon);
   const end   = isoDate(sun);
   const today = isoDate();
+  const category = state.mealCategory;
 
-  const meals = await api.get(`api/meals?start=${start}&end=${end}`).catch(() => []);
-  const mealMap = Object.fromEntries(meals.filter((m) => !pendingMealDeletes.has(m.date)).map((m) => [m.date, m]));
+  const meals = await api.get(`api/meals?start=${start}&end=${end}&category=${category}`).catch(() => []);
+  const mealMap = Object.fromEntries(meals
+    .filter((m) => !pendingMealDeletes.has(mealDeleteKey(m.date, m.category)))
+    .map((m) => [m.date, m]));
 
   const dayRows = [];
   for (let i = 0; i < 7; i++) {
@@ -1654,7 +1672,7 @@ async function viewEssen() {
 
     dayRows.push(el("div", {
       class: "meal-row" + (day === today ? " today" : ""),
-      onclick: () => openMealForm(day, meal),
+      onclick: () => openMealForm(day, meal, category),
     },
       el("div", { class: "meal-day" },
         el("span", { class: "meal-day-name" }, dayLabel),
@@ -1663,10 +1681,14 @@ async function viewEssen() {
       meal
         ? el("div", { class: "meal-content" },
             el("span", { class: "meal-title" }, meal.title),
+            meal.calories != null
+              ? el("span", { class: "meal-kcal" }, `${meal.calories} kcal`)
+              : null,
             meal.ingredients?.length
-              ? el("button", {
+                ? el("button", {
                   class: "ing-btn",
                   title: "Zutaten auf die Einkaufsliste setzen",
+                  "aria-label": `${meal.ingredients.length} Zutaten auf die Einkaufsliste setzen`,
                   onclick: async (e) => { e.stopPropagation(); await ingredientsToList(meal); },
                 }, icon("basket", 13), String(meal.ingredients.length))
               : null,
@@ -1679,7 +1701,9 @@ async function viewEssen() {
       meal
         ? el("button", {
             class: "del-btn",
-            onclick: (e) => { e.stopPropagation(); scheduleMealDelete(day); },
+            title: `${meal.title} aus dem Wochenplan löschen`,
+            "aria-label": `${meal.title} aus dem Wochenplan löschen`,
+            onclick: (e) => { e.stopPropagation(); scheduleMealDelete(day, category); },
           }, icon("x", 15))
         : null
     ));
@@ -1687,7 +1711,9 @@ async function viewEssen() {
 
   setMain(
     el("h1", {}, "Essensplan"),
-    el("p", { class: "subtitle" }, "Diese Woche · Abendessen"),
+    foodSectionNav(),
+    el("p", { class: "subtitle food-subtitle" }, `Diese Woche · ${MEAL_CATEGORIES[category]}`),
+    mealCategoryChips("plan"),
     ...dayRows,
     el("button", { class: "btn-ghost", style: "margin-top:8px",
       onclick: async () => {
@@ -1699,7 +1725,36 @@ async function viewEssen() {
   );
 }
 
-function openMealForm(day, existing) {
+function foodSectionNav() {
+  return el("div", { class: "food-switch", role: "tablist", "aria-label": "Essen-Bereich" },
+    ...[["plan", "Wochenplan"], ["recipes", "Rezeptbox"]].map(([value, label]) =>
+      el("button", {
+        class: state.foodView === value ? "active" : "",
+        role: "tab", "aria-selected": String(state.foodView === value),
+        onclick: () => { state.foodView = value; render(); },
+      }, value === "plan" ? icon("calendar-check", 16) : icon("notes", 16), label)
+    )
+  );
+}
+
+function mealCategoryChips(scope) {
+  const current = scope === "plan" ? state.mealCategory : state.recipeCategory;
+  const entries = scope === "recipes"
+    ? [["all", "Alle"], ...Object.entries(RECIPE_CATEGORIES)]
+    : Object.entries(MEAL_CATEGORIES);
+  return el("div", { class: "chip-row meal-chips" }, ...entries.map(([value, label]) =>
+    el("button", {
+      class: "chip" + (current === value ? " active" : ""),
+      onclick: () => {
+        if (scope === "plan") state.mealCategory = value;
+        else state.recipeCategory = value;
+        render();
+      },
+    }, label)
+  ));
+}
+
+function openMealForm(day, existing, category = "dinner") {
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
   const d = new Date(day + "T12:00:00");
   const label = d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
@@ -1710,6 +1765,8 @@ function openMealForm(day, existing) {
     value: existing?.note || "" });
   const urlInput   = el("input", { type: "url", placeholder: "Link (optional)", class: "form-input",
     value: existing?.url || "" });
+  const caloriesInput = el("input", { type: "number", min: "0", inputmode: "numeric",
+    placeholder: "Kalorien (optional)", class: "form-input", value: existing?.calories ?? "" });
   const ingArea    = el("textarea", { class: "form-input", rows: "4",
     placeholder: "Zutaten — eine pro Zeile (optional)" });
   ingArea.value = (existing?.ingredients || []).join("\n");
@@ -1731,8 +1788,13 @@ function openMealForm(day, existing) {
   overlay.appendChild(el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
     el("h2", { style: "margin-bottom:4px" }, label),
-    el("p", { class: "form-field-label", style: "margin-bottom:12px" }, "Abendessen"),
-    titleInput, noteInput, urlInput,
+    el("p", { class: "form-field-label", style: "margin-bottom:12px" }, MEAL_CATEGORIES[category]),
+    !existing ? el("button", { class: "btn-ghost", onclick: () => {
+      overlay.remove(); state.foodView = "recipes";
+      state.recipeCategory = ["lunch", "dinner"].includes(category) ? "main" : category;
+      render();
+    }}, icon("notes", 15), "Aus der Rezeptbox wählen") : null,
+    titleInput, caloriesInput, noteInput, urlInput,
     el("p", { class: "form-field-label" }, "Zutaten"),
     ingArea, ingHint, errMsg,
     el("div", { class: "form-btns" },
@@ -1742,9 +1804,12 @@ function openMealForm(day, existing) {
         if (!title) { errMsg.textContent = "Titel fehlt"; errMsg.style.display = ""; return; }
         await api.put(`api/meals/${day}`, {
           title,
+          category,
           note: noteInput.value.trim() || null,
           url:  urlInput.value.trim() || null,
           ingredients: ingArea.value.split("\n").map((s) => s.trim()).filter(Boolean),
+          calories: caloriesInput.value === "" ? null : Number(caloriesInput.value),
+          recipe_id: existing?.recipe_id || null,
         });
         overlay.remove();
         render();
@@ -1753,6 +1818,177 @@ function openMealForm(day, existing) {
   ));
   document.body.appendChild(overlay);
   setTimeout(() => titleInput.focus(), 50);
+}
+
+async function viewRecipes() {
+  const recipes = await api.get("api/recipes").catch(() => []);
+  const search = el("input", {
+    type: "search", class: "form-input recipe-search", placeholder: "Rezepte oder Zutaten suchen …",
+    "aria-label": "Rezepte durchsuchen",
+  });
+  const results = el("div", { class: "recipe-grid" });
+
+  const paint = () => {
+    const q = search.value.trim().toLocaleLowerCase("de-DE");
+    const filtered = recipes.filter((recipe) =>
+      (state.recipeCategory === "all" || recipe.category === state.recipeCategory) &&
+      (!q || recipe.name.toLocaleLowerCase("de-DE").includes(q) ||
+        recipe.ingredients.some((item) => item.toLocaleLowerCase("de-DE").includes(q)))
+    );
+    results.replaceChildren(...(filtered.length
+      ? filtered.map(recipeCard)
+      : [emptyState("notes", "Kein Rezept gefunden", "Versuche eine andere Kategorie oder Suche.")]));
+  };
+  search.addEventListener("input", paint);
+
+  setMain(
+    el("h1", {}, "Essensplan"),
+    foodSectionNav(),
+    el("div", { class: "recipe-heading" },
+      el("div", {},
+        el("h2", {}, "Unsere Rezeptbox"),
+        el("p", { class: "muted" }, `${recipes.length} Ideen für eure Woche`)
+      ),
+      el("button", { class: "recipe-add", title: "Neues Rezept", "aria-label": "Neues Rezept",
+        onclick: () => openRecipeForm() }, icon("plus", 18))
+    ),
+    search,
+    mealCategoryChips("recipes"),
+    results
+  );
+  paint();
+}
+
+function recipeCard(recipe) {
+  return el("article", { class: "recipe-card", onclick: () => openRecipeDetail(recipe) },
+    el("div", { class: `recipe-category recipe-category--${recipe.category}` },
+      RECIPE_CATEGORIES[recipe.category]),
+    el("h3", {}, recipe.name),
+    el("div", { class: "recipe-meta" },
+      el("strong", {}, `${recipe.calories} kcal`),
+      recipe.protein != null ? el("span", {}, `${recipe.protein} g Protein`) : null,
+      el("span", {}, `${recipe.ingredients.length} Zutaten`)
+    ),
+    el("button", { class: "recipe-plan", onclick: (e) => {
+      e.stopPropagation(); openRecipeSchedule(recipe);
+    }}, icon("calendar-check", 15), "Einplanen")
+  );
+}
+
+function openRecipeDetail(recipe) {
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  overlay.appendChild(el("div", { class: "modal-card recipe-detail" },
+    el("div", { class: "modal-handle" }),
+    el("div", { class: `recipe-category recipe-category--${recipe.category}` }, RECIPE_CATEGORIES[recipe.category]),
+    el("h2", {}, recipe.name),
+    el("div", { class: "recipe-detail-meta" },
+      el("strong", {}, `${recipe.calories} kcal`),
+      recipe.protein != null ? el("span", {}, `ca. ${recipe.protein} g Protein`) : null
+    ),
+    recipe.note ? el("p", { class: "muted" }, recipe.note) : null,
+    el("p", { class: "form-field-label" }, "Zutaten"),
+    el("ul", { class: "ingredient-list" }, ...recipe.ingredients.map((item) => el("li", {}, item))),
+    el("div", { class: "recipe-actions" },
+      el("button", { class: "btn-soft", onclick: () => { overlay.remove(); openRecipeSchedule(recipe); } },
+        icon("calendar-check", 16), "Einplanen"),
+      el("button", { class: "btn-ghost", onclick: async () => { await ingredientsToList(recipe); } },
+        icon("basket", 16), "Alles einkaufen"),
+      el("button", { class: "btn-ghost", onclick: () => { overlay.remove(); openRecipeForm(recipe); } },
+        icon("pencil", 16), "Bearbeiten")
+    )
+  ));
+  document.body.appendChild(overlay);
+}
+
+function openRecipeSchedule(recipe) {
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const dateInput = el("input", { type: "date", class: "form-input", value: isoDate() });
+  const targetCategoryInput = recipe.category === "main"
+    ? el("select", { class: "form-input" },
+        el("option", { value: "lunch" }, "Mittag"),
+        el("option", { value: "dinner" }, "Abend"))
+    : null;
+  if (targetCategoryInput) {
+    targetCategoryInput.value = ["lunch", "dinner"].includes(state.mealCategory)
+      ? state.mealCategory : "dinner";
+  }
+  overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
+    el("h2", {}, "In die Woche einplanen"),
+    el("p", { class: "muted" }, recipe.name),
+    el("p", { class: "form-field-label" }, recipe.category === "main" ? "Einplanen als" : RECIPE_CATEGORIES[recipe.category]),
+    targetCategoryInput,
+    dateInput,
+    el("div", { class: "form-btns" },
+      el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
+      el("button", { class: "btn-soft", onclick: async () => {
+        const targetCategory = targetCategoryInput?.value || recipe.category;
+        await api.put(`api/meals/${dateInput.value}`, {
+          title: recipe.name, category: targetCategory, note: recipe.note, url: null,
+          ingredients: recipe.ingredients, calories: recipe.calories, recipe_id: recipe.id,
+        });
+        overlay.remove();
+        state.foodView = "plan";
+        state.mealCategory = targetCategory;
+        toast(`${recipe.name} eingeplant`);
+        render();
+      }}, "Einplanen")
+    )
+  ));
+  document.body.appendChild(overlay);
+}
+
+function openRecipeForm(existing = null) {
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const nameInput = el("input", { class: "form-input", placeholder: "Name des Rezepts", value: existing?.name || "" });
+  const categoryInput = el("select", { class: "form-input" }, ...Object.entries(RECIPE_CATEGORIES).map(([value, label]) =>
+    el("option", { value }, label)
+  ));
+  if (existing) categoryInput.value = existing.category;
+  if (!existing && state.recipeCategory !== "all") categoryInput.value = state.recipeCategory;
+  const caloriesInput = el("input", { class: "form-input", type: "number", min: "0", inputmode: "numeric",
+    placeholder: "Kalorien", value: existing?.calories ?? "" });
+  const proteinInput = el("input", { class: "form-input", type: "number", min: "0", inputmode: "numeric",
+    placeholder: "Protein in g (optional)", value: existing?.protein ?? "" });
+  const noteInput = el("textarea", { class: "form-input", rows: "2", placeholder: "Notiz oder Zubereitung (optional)" });
+  noteInput.value = existing?.note || "";
+  const ingredientsInput = el("textarea", { class: "form-input", rows: "7", placeholder: "Eine Zutat mit Menge pro Zeile" });
+  ingredientsInput.value = (existing?.ingredients || []).join("\n");
+  const err = el("p", { class: "err", style: "display:none" });
+
+  overlay.appendChild(el("div", { class: "modal-card" },
+    el("div", { class: "modal-handle" }),
+    el("h2", {}, existing ? "Rezept bearbeiten" : "Neues Rezept"),
+    nameInput, categoryInput,
+    el("div", { class: "recipe-number-row" }, caloriesInput, proteinInput),
+    el("p", { class: "form-field-label" }, "Zutaten mit Mengen"),
+    ingredientsInput, noteInput, err,
+    existing ? el("button", { class: "recipe-delete", onclick: async () => {
+      if (!confirm(`„${existing.name}“ wirklich löschen?`)) return;
+      await api.del(`api/recipes/${existing.id}`);
+      overlay.remove(); toast("Rezept gelöscht"); render();
+    }}, "Rezept löschen") : null,
+    el("div", { class: "form-btns" },
+      el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
+      el("button", { class: "btn-soft", onclick: async () => {
+        const payload = {
+          name: nameInput.value.trim(), category: categoryInput.value,
+          calories: Number(caloriesInput.value),
+          protein: proteinInput.value === "" ? null : Number(proteinInput.value),
+          ingredients: ingredientsInput.value.split("\n").map((s) => s.trim()).filter(Boolean),
+          note: noteInput.value.trim() || null,
+        };
+        if (!payload.name) { err.textContent = "Name fehlt"; err.style.display = ""; return; }
+        if (!caloriesInput.value) { err.textContent = "Kalorien fehlen"; err.style.display = ""; return; }
+        if (!payload.ingredients.length) { err.textContent = "Mindestens eine Zutat fehlt"; err.style.display = ""; return; }
+        if (existing) await api.put(`api/recipes/${existing.id}`, payload);
+        else await api.post("api/recipes", payload);
+        overlay.remove(); toast(existing ? "Rezept gespeichert" : "Rezept angelegt"); render();
+      }}, "Speichern")
+    )
+  ));
+  document.body.appendChild(overlay);
+  setTimeout(() => nameInput.focus(), 50);
 }
 
 /* ---------- Einstellungen ---------- */

@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.21.0] - 2026-07-15
+
+### Neu
+- **Rezeptbox unter Essen**: 24 alltagstaugliche Startrezepte aus dem 1.800-kcal-Rezeptbaukasten, gegliedert in Frühstück, Hauptgerichte und Snacks, mit Zutatenmengen, Kalorien und Proteinwerten. Hauptgerichte lassen sich beim Einplanen flexibel Mittag oder Abend zuordnen.
+- Rezepte lassen sich durchsuchen, neu anlegen, bearbeiten und löschen sowie direkt für einen Wochentag einplanen.
+- Alle Zutaten eines Rezepts landen mit einem Tap gesammelt auf der ersten Einkaufsliste; bereits offene identische Artikel werden nicht doppelt angelegt.
+- Der Wochenplan unterstützt jetzt pro Tag je einen Eintrag für Frühstück, Mittag, Abendessen und Snacks.
+
+### Technik
+- Bestehende Essenspläne werden automatisch und verlustfrei als Abendessen migriert.
+- Geplante Rezepte speichern eine Momentaufnahme ihrer Zutaten und Kalorien, damit spätere Rezeptänderungen bestehende Wochenpläne nicht unbeabsichtigt verändern.
+- Sechs neue Tests decken Startdaten, Rezeptpflege, vier Tageskategorien, beide Migrationen und den Sammeltransfer zur Einkaufsliste ab.
+
+---
+
 ## [0.20.1] - 2026-07-11
 
 ### Neu
