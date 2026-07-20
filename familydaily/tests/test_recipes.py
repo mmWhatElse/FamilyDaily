@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import aiosqlite
@@ -26,6 +27,7 @@ class RecipeAndMealPlanTests(unittest.IsolatedAsyncioTestCase):
             {"breakfast", "main", "snack"},
         )
         self.assertTrue(all(item["ingredients"] for item in items))
+        self.assertTrue(any(item["tags"] for item in items))
 
     async def test_recipe_can_be_created_and_edited(self):
         created = await recipes.create_recipe(recipes.RecipeIn(
@@ -41,9 +43,29 @@ class RecipeAndMealPlanTests(unittest.IsolatedAsyncioTestCase):
             calories=440,
             protein=26,
             ingredients=["50 g Haferflocken", "250 ml Milch", "1 Apfel"],
+            tags=["quick", "family"],
         ))
         self.assertEqual(updated["calories"], 440)
         self.assertIn("1 Apfel", updated["ingredients"])
+        self.assertEqual(updated["tags"], ["quick", "family"])
+
+    async def test_favorite_and_last_cooked_are_derived_for_recipe_box(self):
+        recipe = await recipes.create_recipe(recipes.RecipeIn(
+            name="Lieblingsgericht", category="main", calories=500,
+            ingredients=["1 Lieblingszutat"], tags=["family"],
+        ))
+        await recipes.set_favorite(recipe["id"], recipes.FavoriteIn(favorite=True))
+        today = date.today().isoformat()
+        await meals.set_meal(today, meals.MealIn(
+            title=recipe["name"], category="dinner", ingredients=recipe["ingredients"],
+            calories=recipe["calories"], recipe_id=recipe["id"],
+        ))
+
+        found = (await recipes.get_recipes(q="Lieblingsgericht"))[0]
+
+        self.assertTrue(found["favorite"])
+        self.assertEqual(found["last_cooked"], today)
+        self.assertEqual(found["tags"], ["family"])
 
     async def test_old_lunch_and_dinner_recipes_become_main_dishes(self):
         db = await db_module.open_db()
@@ -64,6 +86,27 @@ class RecipeAndMealPlanTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([row["category"] for row in rows], ["main", "main"])
         finally:
             await db.close()
+
+    async def test_deleting_recipe_keeps_planned_meal_snapshot(self):
+        recipe = await recipes.create_recipe(recipes.RecipeIn(
+            name="Testgericht",
+            category="main",
+            calories=500,
+            ingredients=["200 g Testzutat"],
+        ))
+        day = "2026-07-20"
+        await meals.set_meal(day, meals.MealIn(
+            title=recipe["name"], category="dinner", calories=recipe["calories"],
+            ingredients=recipe["ingredients"], recipe_id=recipe["id"],
+        ))
+
+        await recipes.delete_recipe(recipe["id"])
+
+        self.assertEqual(await recipes.get_recipes(q="Testgericht"), [])
+        planned = (await meals.get_meals(day, day))[0]
+        self.assertEqual(planned["title"], "Testgericht")
+        self.assertEqual(planned["ingredients"], ["200 g Testzutat"])
+        self.assertIsNone(planned["recipe_id"])
 
     async def test_four_categories_can_share_one_day(self):
         day = "2026-07-15"

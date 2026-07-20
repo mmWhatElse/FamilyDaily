@@ -5,6 +5,39 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.22.0] - 2026-07-20
+
+### Neu
+- Rezepte können als Favoriten markiert und gezielt gefiltert werden; zusätzlich zeigt die Rezeptbox, wann ein Gericht zuletzt im Wochenplan stand.
+- Sechs alltagstaugliche Tags wie „Schnell“, „Familientauglich“, „Meal Prep“ und „Vegetarisch“ erleichtern das Stöbern. Die 24 Startrezepte sind bereits passend einsortiert.
+- „Idee“ schlägt auf Basis der aktiven Kategorie, Suche und Filter ein Rezept vor und bevorzugt Gerichte, die nicht in den letzten sieben Tagen gekocht wurden.
+- Beim Übertragen auf die Einkaufsliste lassen sich vorhandene Zutaten vorher abwählen. Das funktioniert sowohl am Rezept als auch direkt im Wochenplan.
+- Der neue Wocheneinkauf sammelt mit einem Tap die Zutaten aller geplanten Mahlzeiten und lässt sie vor dem Übertragen gemeinsam prüfen.
+- Bestehende Rezepte können als vorausgefüllte Variante gespeichert und mit einer persönlichen Notiz ergänzt werden.
+
+### Geändert
+- Suche, Kategorien, Tags und Favoriten lassen sich miteinander kombinieren; der Suchbegriff bleibt auch nach einer Favoriten-Aktion erhalten.
+- Favoriten und Tags werden bei bestehenden Installationen automatisch und ohne Datenverlust ergänzt.
+
+### Tests
+- Backendtests decken Tags, Favoriten und die aus dem Wochenplan abgeleitete Kochhistorie ab.
+- Rezeptbox, Varianten, Zutatenauswahl und Wocheneinkauf wurden zusätzlich in der mobilen Oberfläche geprüft.
+
+---
+
+## [0.21.1] - 2026-07-20
+
+### Neu
+- Rezepte lassen sich jetzt direkt aus der Rezeptansicht löschen; eine Sicherheitsabfrage verhindert versehentliches Entfernen.
+
+### Geändert
+- Bereits eingeplante Mahlzeiten bleiben als Momentaufnahme mit Titel, Zutaten und Kalorien erhalten, wenn das zugrunde liegende Rezept gelöscht wird.
+
+### Tests
+- Ein neuer Regressionstest deckt das Löschen eines Rezepts samt Erhalt bestehender Wochenplaneinträge ab.
+
+---
+
 ## [0.21.0] - 2026-07-15
 
 ### Neu

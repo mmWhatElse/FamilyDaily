@@ -4,7 +4,7 @@ const $main = document.getElementById("view");
 const state = {
   tab: "heute", listId: null, listName: "", calOffset: 0, calView: "range",
   agendaYears: 1, taskFilter: null, foodView: "plan", mealCategory: "dinner",
-  recipeCategory: "all",
+  recipeCategory: "all", recipeTags: [], recipeFavoritesOnly: false, recipeSearch: "",
 };
 const pendingTaskDeletes = new Set();
 const pendingEventDeletes = new Set();
@@ -162,6 +162,10 @@ const MEAL_CATEGORIES = {
 };
 const RECIPE_CATEGORIES = {
   breakfast: "Frühstück", main: "Hauptgerichte", snack: "Snacks",
+};
+const RECIPE_TAGS = {
+  quick: "Schnell", family: "Familientauglich", mealprep: "Meal Prep",
+  vegetarian: "Vegetarisch", takeaway: "Zum Mitnehmen", weekend: "Wochenende",
 };
 
 /* Einkaufs-Kategorien in Supermarkt-Reihenfolge */
@@ -422,6 +426,63 @@ async function ingredientsToList(meal) {
     ? `${added} Zutat${added === 1 ? "" : "en"} auf „${target.name}“ gesetzt`
     : "Alles schon auf der Liste");
   return true;
+}
+
+function openIngredientPicker(title, ingredients, subtitle = "Vorhandene Zutaten einfach abwählen.") {
+  const seen = new Set();
+  const unique = (ingredients || []).filter((item) => {
+    const key = item.trim().toLocaleLowerCase("de-DE");
+    if (!key || seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+  if (!unique.length) { toast("Keine Zutaten vorhanden"); return; }
+
+  const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
+  const checks = unique.map((item) => {
+    const input = el("input", { type: "checkbox" });
+    input.checked = true;
+    return { item, input };
+  });
+  const addBtn = el("button", { class: "btn-soft" });
+  const updateCount = () => {
+    const count = checks.filter(({ input }) => input.checked).length;
+    addBtn.replaceChildren(icon("basket", 16), document.createTextNode(`${count} auswählen`));
+    addBtn.disabled = count === 0;
+  };
+  checks.forEach(({ input }) => input.addEventListener("change", updateCount));
+  addBtn.addEventListener("click", async () => {
+    const selected = checks.filter(({ input }) => input.checked).map(({ item }) => item);
+    if (await ingredientsToList({ ingredients: selected })) overlay.remove();
+  });
+
+  overlay.appendChild(el("div", { class: "modal-card ingredient-picker" },
+    el("div", { class: "modal-handle" }),
+    el("h2", {}, title),
+    el("p", { class: "muted" }, subtitle),
+    el("button", { class: "picker-toggle", onclick: () => {
+      const selectAll = checks.some(({ input }) => !input.checked);
+      checks.forEach(({ input }) => { input.checked = selectAll; });
+      updateCount();
+    }}, "Alle an-/abwählen"),
+    el("div", { class: "ingredient-picker-list" }, ...checks.map(({ item, input }) =>
+      el("label", { class: "ingredient-check" }, input, el("span", {}, item))
+    )),
+    el("div", { class: "form-btns" },
+      el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
+      addBtn
+    )
+  ));
+  document.body.appendChild(overlay);
+  updateCount();
+}
+
+async function openWeekShopping(start, end) {
+  const meals = await api.get(`api/meals?start=${start}&end=${end}`).catch(() => []);
+  const visible = meals.filter((meal) => !pendingMealDeletes.has(mealDeleteKey(meal.date, meal.category)));
+  const ingredients = visible.flatMap((meal) => meal.ingredients || []);
+  if (!ingredients.length) { toast("Für diese Woche sind noch keine Zutaten geplant"); return; }
+  openIngredientPicker("Wocheneinkauf vorbereiten", ingredients,
+    `Zutaten aus ${visible.length} geplanten Mahlzeit${visible.length === 1 ? "" : "en"}.`);
 }
 
 async function shiftTask(task, dueDate, overlay) {
@@ -810,7 +871,7 @@ async function viewHeute() {
                 meal.ingredients?.length
                   ? el("button", { class: "note-link", onclick: async (e) => {
                       e.stopPropagation();
-                      await ingredientsToList(meal);
+                      openIngredientPicker(meal.title, meal.ingredients);
                       render();
                     } }, icon("basket", 12), "Zutaten auf die Liste")
                   : null
@@ -1689,7 +1750,7 @@ async function viewEssen() {
                   class: "ing-btn",
                   title: "Zutaten auf die Einkaufsliste setzen",
                   "aria-label": `${meal.ingredients.length} Zutaten auf die Einkaufsliste setzen`,
-                  onclick: async (e) => { e.stopPropagation(); await ingredientsToList(meal); },
+                  onclick: (e) => { e.stopPropagation(); openIngredientPicker(meal.title, meal.ingredients); },
                 }, icon("basket", 13), String(meal.ingredients.length))
               : null,
             meal.url
@@ -1715,6 +1776,8 @@ async function viewEssen() {
     el("p", { class: "subtitle food-subtitle" }, `Diese Woche · ${MEAL_CATEGORIES[category]}`),
     mealCategoryChips("plan"),
     ...dayRows,
+    el("button", { class: "btn-soft week-shopping", onclick: () => openWeekShopping(start, end) },
+      icon("basket", 16), "Wocheneinkauf vorbereiten"),
     el("button", { class: "btn-ghost", style: "margin-top:8px",
       onclick: async () => {
         const res = await api.post("api/meals/copy-last-week");
@@ -1824,22 +1887,46 @@ async function viewRecipes() {
   const recipes = await api.get("api/recipes").catch(() => []);
   const search = el("input", {
     type: "search", class: "form-input recipe-search", placeholder: "Rezepte oder Zutaten suchen …",
-    "aria-label": "Rezepte durchsuchen",
+    "aria-label": "Rezepte durchsuchen", value: state.recipeSearch,
   });
   const results = el("div", { class: "recipe-grid" });
 
-  const paint = () => {
+  const filteredRecipes = () => {
     const q = search.value.trim().toLocaleLowerCase("de-DE");
-    const filtered = recipes.filter((recipe) =>
+    return recipes.filter((recipe) =>
       (state.recipeCategory === "all" || recipe.category === state.recipeCategory) &&
+      (!state.recipeFavoritesOnly || recipe.favorite) &&
+      state.recipeTags.every((tag) => (recipe.tags || []).includes(tag)) &&
       (!q || recipe.name.toLocaleLowerCase("de-DE").includes(q) ||
         recipe.ingredients.some((item) => item.toLocaleLowerCase("de-DE").includes(q)))
     );
+  };
+  const paint = () => {
+    const filtered = filteredRecipes();
     results.replaceChildren(...(filtered.length
       ? filtered.map(recipeCard)
       : [emptyState("notes", "Kein Rezept gefunden", "Versuche eine andere Kategorie oder Suche.")]));
   };
-  search.addEventListener("input", paint);
+  search.addEventListener("input", () => { state.recipeSearch = search.value; paint(); });
+
+  const tagButtons = Object.entries(RECIPE_TAGS).map(([value, label]) => {
+    const button = el("button", { class: "chip" }, label);
+    const sync = () => button.classList.toggle("active", state.recipeTags.includes(value));
+    button.addEventListener("click", () => {
+      state.recipeTags = state.recipeTags.includes(value)
+        ? state.recipeTags.filter((tag) => tag !== value)
+        : [...state.recipeTags, value];
+      sync(); paint();
+    });
+    sync(); return button;
+  });
+  const favoriteFilter = el("button", {
+    class: "chip favorite-filter" + (state.recipeFavoritesOnly ? " active" : ""),
+    onclick: () => {
+      state.recipeFavoritesOnly = !state.recipeFavoritesOnly;
+      favoriteFilter.classList.toggle("active", state.recipeFavoritesOnly); paint();
+    },
+  }, "♥ Favoriten");
 
   setMain(
     el("h1", {}, "Essensplan"),
@@ -1849,11 +1936,16 @@ async function viewRecipes() {
         el("h2", {}, "Unsere Rezeptbox"),
         el("p", { class: "muted" }, `${recipes.length} Ideen für eure Woche`)
       ),
-      el("button", { class: "recipe-add", title: "Neues Rezept", "aria-label": "Neues Rezept",
-        onclick: () => openRecipeForm() }, icon("plus", 18))
+      el("div", { class: "recipe-heading-actions" },
+        el("button", { class: "recipe-suggest", onclick: () => suggestRecipe(filteredRecipes()) },
+          icon("refresh", 16), "Idee"),
+        el("button", { class: "recipe-add", title: "Neues Rezept", "aria-label": "Neues Rezept",
+          onclick: () => openRecipeForm() }, icon("plus", 18))
+      )
     ),
     search,
     mealCategoryChips("recipes"),
+    el("div", { class: "recipe-tag-filters" }, favoriteFilter, ...tagButtons),
     results
   );
   paint();
@@ -1863,11 +1955,22 @@ function recipeCard(recipe) {
   return el("article", { class: "recipe-card", onclick: () => openRecipeDetail(recipe) },
     el("div", { class: `recipe-category recipe-category--${recipe.category}` },
       RECIPE_CATEGORIES[recipe.category]),
+    el("button", {
+      class: "favorite-btn" + (recipe.favorite ? " active" : ""),
+      title: recipe.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen",
+      "aria-label": recipe.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen",
+      onclick: (e) => { e.stopPropagation(); toggleRecipeFavorite(recipe); },
+    }, "♥"),
     el("h3", {}, recipe.name),
     el("div", { class: "recipe-meta" },
       el("strong", {}, `${recipe.calories} kcal`),
       recipe.protein != null ? el("span", {}, `${recipe.protein} g Protein`) : null,
       el("span", {}, `${recipe.ingredients.length} Zutaten`)
+    ),
+    el("div", { class: "recipe-card-foot" },
+      el("span", { class: "last-cooked" }, lastCookedLabel(recipe.last_cooked)),
+      ...(recipe.tags || []).slice(0, 2).map((tag) =>
+        el("span", { class: "recipe-tag" }, RECIPE_TAGS[tag] || tag))
     ),
     el("button", { class: "recipe-plan", onclick: (e) => {
       e.stopPropagation(); openRecipeSchedule(recipe);
@@ -1879,25 +1982,75 @@ function openRecipeDetail(recipe) {
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
   overlay.appendChild(el("div", { class: "modal-card recipe-detail" },
     el("div", { class: "modal-handle" }),
-    el("div", { class: `recipe-category recipe-category--${recipe.category}` }, RECIPE_CATEGORIES[recipe.category]),
+    el("div", { class: "recipe-detail-head" },
+      el("div", { class: `recipe-category recipe-category--${recipe.category}` }, RECIPE_CATEGORIES[recipe.category]),
+      el("button", {
+        class: "favorite-btn favorite-btn--detail" + (recipe.favorite ? " active" : ""),
+        onclick: async () => { await toggleRecipeFavorite(recipe); overlay.remove(); },
+        "aria-label": recipe.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen",
+      }, "♥")
+    ),
     el("h2", {}, recipe.name),
     el("div", { class: "recipe-detail-meta" },
       el("strong", {}, `${recipe.calories} kcal`),
-      recipe.protein != null ? el("span", {}, `ca. ${recipe.protein} g Protein`) : null
+      recipe.protein != null ? el("span", {}, `ca. ${recipe.protein} g Protein`) : null,
+      el("span", {}, lastCookedLabel(recipe.last_cooked))
     ),
-    recipe.note ? el("p", { class: "muted" }, recipe.note) : null,
+    (recipe.tags || []).length
+      ? el("div", { class: "recipe-tags" }, ...(recipe.tags || []).map((tag) =>
+          el("span", { class: "recipe-tag" }, RECIPE_TAGS[tag] || tag)))
+      : null,
+    recipe.note ? el("div", { class: "recipe-note" },
+      el("span", { class: "form-field-label" }, "Persönliche Notiz"),
+      el("p", {}, recipe.note)) : null,
     el("p", { class: "form-field-label" }, "Zutaten"),
     el("ul", { class: "ingredient-list" }, ...recipe.ingredients.map((item) => el("li", {}, item))),
     el("div", { class: "recipe-actions" },
       el("button", { class: "btn-soft", onclick: () => { overlay.remove(); openRecipeSchedule(recipe); } },
         icon("calendar-check", 16), "Einplanen"),
-      el("button", { class: "btn-ghost", onclick: async () => { await ingredientsToList(recipe); } },
-        icon("basket", 16), "Alles einkaufen"),
+      el("button", { class: "btn-ghost", onclick: () => openIngredientPicker(recipe.name, recipe.ingredients) },
+        icon("basket", 16), "Zutaten auswählen"),
       el("button", { class: "btn-ghost", onclick: () => { overlay.remove(); openRecipeForm(recipe); } },
-        icon("pencil", 16), "Bearbeiten")
+        icon("pencil", 16), "Bearbeiten"),
+      el("button", { class: "btn-ghost", onclick: () => { overlay.remove(); openRecipeForm(null, recipe); } },
+        icon("repeat", 16), "Als Variante"),
+      el("button", { class: "btn-ghost recipe-danger", onclick: () => deleteRecipe(recipe, overlay) },
+        icon("x", 16), "Rezept löschen")
     )
   ));
   document.body.appendChild(overlay);
+}
+
+function lastCookedLabel(day) {
+  if (!day) return "Noch nicht gekocht";
+  const days = daysBetween(day, isoDate());
+  if (days <= 0) return "Heute gekocht";
+  if (days === 1) return "Gestern gekocht";
+  if (days < 14) return `Vor ${days} Tagen gekocht`;
+  return `Zuletzt ${fmtDate(day)}`;
+}
+
+async function toggleRecipeFavorite(recipe) {
+  recipe.favorite = !recipe.favorite;
+  await api.patch(`api/recipes/${recipe.id}/favorite`, { favorite: recipe.favorite });
+  toast(recipe.favorite ? "Zu Favoriten hinzugefügt" : "Aus Favoriten entfernt");
+  render();
+}
+
+function suggestRecipe(recipes) {
+  if (!recipes.length) { toast("Für diese Filter gibt es keinen Vorschlag"); return; }
+  const notRecent = recipes.filter((recipe) =>
+    !recipe.last_cooked || daysBetween(recipe.last_cooked, isoDate()) > 7);
+  const candidates = notRecent.length ? notRecent : recipes;
+  openRecipeDetail(candidates[Math.floor(Math.random() * candidates.length)]);
+}
+
+async function deleteRecipe(recipe, overlay) {
+  if (!confirm(`„${recipe.name}“ wirklich löschen? Bereits eingeplante Mahlzeiten bleiben erhalten.`)) return;
+  await api.del(`api/recipes/${recipe.id}`);
+  overlay?.remove();
+  toast("Rezept gelöscht");
+  render();
 }
 
 function openRecipeSchedule(recipe) {
@@ -1938,36 +2091,49 @@ function openRecipeSchedule(recipe) {
   document.body.appendChild(overlay);
 }
 
-function openRecipeForm(existing = null) {
+function openRecipeForm(existing = null, template = null) {
+  const source = existing || template;
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
-  const nameInput = el("input", { class: "form-input", placeholder: "Name des Rezepts", value: existing?.name || "" });
+  const nameInput = el("input", { class: "form-input", placeholder: "Name des Rezepts",
+    value: template ? `${template.name} – Variante` : (existing?.name || "") });
   const categoryInput = el("select", { class: "form-input" }, ...Object.entries(RECIPE_CATEGORIES).map(([value, label]) =>
     el("option", { value }, label)
   ));
-  if (existing) categoryInput.value = existing.category;
-  if (!existing && state.recipeCategory !== "all") categoryInput.value = state.recipeCategory;
+  if (source) categoryInput.value = source.category;
+  if (!source && state.recipeCategory !== "all") categoryInput.value = state.recipeCategory;
   const caloriesInput = el("input", { class: "form-input", type: "number", min: "0", inputmode: "numeric",
-    placeholder: "Kalorien", value: existing?.calories ?? "" });
+    placeholder: "Kalorien", value: source?.calories ?? "" });
   const proteinInput = el("input", { class: "form-input", type: "number", min: "0", inputmode: "numeric",
-    placeholder: "Protein in g (optional)", value: existing?.protein ?? "" });
-  const noteInput = el("textarea", { class: "form-input", rows: "2", placeholder: "Notiz oder Zubereitung (optional)" });
-  noteInput.value = existing?.note || "";
+    placeholder: "Protein in g (optional)", value: source?.protein ?? "" });
+  const noteInput = el("textarea", { class: "form-input", rows: "2",
+    placeholder: "Zum Beispiel: Kinder ohne Zwiebeln" });
+  noteInput.value = source?.note || "";
   const ingredientsInput = el("textarea", { class: "form-input", rows: "7", placeholder: "Eine Zutat mit Menge pro Zeile" });
-  ingredientsInput.value = (existing?.ingredients || []).join("\n");
+  ingredientsInput.value = (source?.ingredients || []).join("\n");
+  const selectedTags = new Set(source?.tags || []);
+  const tagInputs = el("div", { class: "recipe-tag-editor" }, ...Object.entries(RECIPE_TAGS).map(([value, label]) => {
+    const button = el("button", { class: "chip" + (selectedTags.has(value) ? " active" : "") }, label);
+    button.addEventListener("click", () => {
+      if (selectedTags.has(value)) selectedTags.delete(value); else selectedTags.add(value);
+      button.classList.toggle("active", selectedTags.has(value));
+    });
+    return button;
+  }));
   const err = el("p", { class: "err", style: "display:none" });
 
   overlay.appendChild(el("div", { class: "modal-card" },
     el("div", { class: "modal-handle" }),
-    el("h2", {}, existing ? "Rezept bearbeiten" : "Neues Rezept"),
+    el("h2", {}, existing ? "Rezept bearbeiten" : (template ? "Variante anlegen" : "Neues Rezept")),
     nameInput, categoryInput,
+    el("p", { class: "form-field-label" }, "Passt gut für"),
+    tagInputs,
     el("div", { class: "recipe-number-row" }, caloriesInput, proteinInput),
     el("p", { class: "form-field-label" }, "Zutaten mit Mengen"),
-    ingredientsInput, noteInput, err,
-    existing ? el("button", { class: "recipe-delete", onclick: async () => {
-      if (!confirm(`„${existing.name}“ wirklich löschen?`)) return;
-      await api.del(`api/recipes/${existing.id}`);
-      overlay.remove(); toast("Rezept gelöscht"); render();
-    }}, "Rezept löschen") : null,
+    ingredientsInput,
+    el("p", { class: "form-field-label" }, "Persönliche Notiz"),
+    noteInput, err,
+    existing ? el("button", { class: "recipe-delete", onclick: () => deleteRecipe(existing, overlay) },
+      "Rezept löschen") : null,
     el("div", { class: "form-btns" },
       el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
       el("button", { class: "btn-soft", onclick: async () => {
@@ -1977,13 +2143,14 @@ function openRecipeForm(existing = null) {
           protein: proteinInput.value === "" ? null : Number(proteinInput.value),
           ingredients: ingredientsInput.value.split("\n").map((s) => s.trim()).filter(Boolean),
           note: noteInput.value.trim() || null,
+          tags: [...selectedTags],
         };
         if (!payload.name) { err.textContent = "Name fehlt"; err.style.display = ""; return; }
         if (!caloriesInput.value) { err.textContent = "Kalorien fehlen"; err.style.display = ""; return; }
         if (!payload.ingredients.length) { err.textContent = "Mindestens eine Zutat fehlt"; err.style.display = ""; return; }
         if (existing) await api.put(`api/recipes/${existing.id}`, payload);
         else await api.post("api/recipes", payload);
-        overlay.remove(); toast(existing ? "Rezept gespeichert" : "Rezept angelegt"); render();
+        overlay.remove(); toast(existing ? "Rezept gespeichert" : (template ? "Variante angelegt" : "Rezept angelegt")); render();
       }}, "Speichern")
     )
   ));

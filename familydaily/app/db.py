@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS recipe (
     protein INTEGER,
     ingredients TEXT NOT NULL DEFAULT '[]',
     note TEXT,
+    favorite INTEGER NOT NULL DEFAULT 0,
+    tags TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -102,6 +104,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 
 async def _migrate(db: aiosqlite.Connection) -> None:
+    cur = await db.execute("PRAGMA table_info(recipe)")
+    recipe_cols = [r[1] for r in await cur.fetchall()]
+    if "favorite" not in recipe_cols:
+        await db.execute("ALTER TABLE recipe ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+    if "tags" not in recipe_cols:
+        await db.execute("ALTER TABLE recipe ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
     # Mittag und Abend sind in der Rezeptbox dieselbe Art Hauptgericht.
     await db.execute(
         "UPDATE recipe SET category = 'main' WHERE category IN ('lunch', 'dinner')"
@@ -194,11 +202,19 @@ async def init_db() -> None:
         cur = await db.execute("SELECT COUNT(*) FROM recipe")
         (count,) = await cur.fetchone()
         if count == 0:
-            from .recipe_seed import RECIPES
+            from .recipe_seed import RECIPES, RECIPE_TAGS
             await db.executemany(
-                "INSERT INTO recipe (name, category, calories, protein, ingredients) VALUES (?, ?, ?, ?, ?)",
-                [(name, category, calories, protein, json.dumps(ingredients, ensure_ascii=False))
+                "INSERT INTO recipe (name, category, calories, protein, ingredients, tags) VALUES (?, ?, ?, ?, ?, ?)",
+                [(name, category, calories, protein, json.dumps(ingredients, ensure_ascii=False),
+                  json.dumps(RECIPE_TAGS.get(name, []), ensure_ascii=False))
                  for name, category, calories, protein, ingredients in RECIPES],
+            )
+        # Starter-Tags auch bei bestehenden Installationen ergänzen.
+        from .recipe_seed import RECIPE_TAGS
+        for name, tags in RECIPE_TAGS.items():
+            await db.execute(
+                "UPDATE recipe SET tags = ? WHERE name = ? COLLATE NOCASE AND (tags IS NULL OR tags = '[]')",
+                (json.dumps(tags, ensure_ascii=False), name),
             )
         await db.commit()
 
