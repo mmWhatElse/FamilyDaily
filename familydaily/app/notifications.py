@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .calendar_api import _parse_person_ids
 from .db import open_db
 from .ha import HAError, ha_get, ha_post
 
@@ -93,14 +94,18 @@ async def list_notify_services():
 
 @router.post("/test")
 async def send_test():
-    """Immediately send a test notification to verify the configured service."""
+    """Send a test to all standard and person-specific devices."""
     db = await open_db()
     try:
         cur = await db.execute("SELECT * FROM notification_settings WHERE id = 1")
         row = await cur.fetchone()
+        mappings = await _person_services(db)
     finally:
         await db.close()
-    services = _row_services(row) if row else []
+    services = list(dict.fromkeys([
+        *(_row_services(row) if row else []),
+        *(service for person in mappings.values() for service in person),
+    ]))
     if not services:
         raise HTTPException(400, "Kein Notify-Service konfiguriert")
     try:
@@ -149,6 +154,32 @@ async def _mark_sent(db, key: str) -> None:
     await db.commit()
 
 
+async def _person_services(db) -> dict[int, list[str]]:
+    """Return the configured HA notify services for every family member."""
+    cur = await db.execute("SELECT id, notify_services FROM person")
+    result = {}
+    for row in await cur.fetchall():
+        try:
+            services = json.loads(row["notify_services"] or "[]")
+        except (TypeError, ValueError):
+            services = []
+        result[row["id"]] = list(dict.fromkeys(services))
+    return result
+
+
+def _services_for_persons(
+    person_ids: list[int], person_services: dict[int, list[str]], fallback: list[str]
+) -> list[str]:
+    """Assigned entries go to their persons; unassigned entries use global defaults."""
+    if not person_ids:
+        return list(dict.fromkeys(fallback))
+    return list(dict.fromkeys(
+        service
+        for person_id in person_ids
+        for service in person_services.get(person_id, [])
+    ))
+
+
 # ─── Reminder logic ───────────────────────────────────────────────────────────
 
 async def _task_reminders(db, settings: dict) -> None:
@@ -159,12 +190,9 @@ async def _task_reminders(db, settings: dict) -> None:
         return
 
     today = date.today().isoformat()
-    key = f"task_due_{today}"
-    if await _already_sent(db, key):
-        return
-
     cur = await db.execute(
-        "SELECT title FROM task WHERE done = 0 AND due_date IS NOT NULL AND due_date <= ? "
+        "SELECT id, title, person_ids FROM task "
+        "WHERE done = 0 AND due_date IS NOT NULL AND due_date <= ? "
         "ORDER BY due_date, id",
         (today,),
     )
@@ -172,17 +200,35 @@ async def _task_reminders(db, settings: dict) -> None:
     if not rows:
         return
 
-    count = len(rows)
-    preview = ", ".join(r["title"] for r in rows[:3])
-    if count > 3:
-        preview += f" (+{count - 3} weitere)"
+    mappings = await _person_services(db)
+    tasks_by_service: dict[str, list] = {}
+    for row in rows:
+        try:
+            person_ids = json.loads(row["person_ids"] or "[]")
+        except (TypeError, ValueError):
+            person_ids = []
+        services = _services_for_persons(person_ids, mappings, settings["notify_services"])
+        for service in services:
+            tasks_by_service.setdefault(service, []).append(row)
 
-    await _send_all(
-        settings["notify_services"],
-        title=f"FamilyDaily — {count} Aufgabe{'n' if count != 1 else ''} heute",
-        message=preview,
-    )
-    await _mark_sent(db, key)
+    for service, service_rows in tasks_by_service.items():
+        key = f"task_due_{today}_{service}"
+        if await _already_sent(db, key):
+            continue
+        count = len(service_rows)
+        preview = ", ".join(r["title"] for r in service_rows[:3])
+        if count > 3:
+            preview += f" (+{count - 3} weitere)"
+        try:
+            await _send_all(
+                [service],
+                title=f"FamilyDaily — {count} Aufgabe{'n' if count != 1 else ''} heute",
+                message=preview,
+            )
+        except Exception as exc:
+            log.warning("Aufgaben-Erinnerung an %s fehlgeschlagen: %s", service, exc)
+            continue
+        await _mark_sent(db, key)
 
 
 async def _event_reminders(db, settings: dict) -> None:
@@ -195,6 +241,7 @@ async def _event_reminders(db, settings: dict) -> None:
     entities = [r["entity_id"] for r in await cur.fetchall()]
     if not entities:
         return
+    mappings = await _person_services(db)
 
     fmt = "%Y-%m-%dT%H:%M:%SZ"
     start_str = now_utc.strftime(fmt)
@@ -215,10 +262,6 @@ async def _event_reminders(db, settings: dict) -> None:
                 continue  # all-day event — skip
             ev_start_raw = ev_start_obj["dateTime"]
             uid = ev.get("uid") or ev.get("summary", "unknown")
-            key = f"event_{entity_id}_{uid}_{ev_start_raw[:16]}"
-            if await _already_sent(db, key):
-                continue
-
             try:
                 ev_dt = datetime.fromisoformat(ev_start_raw)
                 if ev_dt.tzinfo is None:
@@ -232,12 +275,24 @@ async def _event_reminders(db, settings: dict) -> None:
 
             time_str = ev_dt.astimezone().strftime("%H:%M")
             summary = ev.get("summary", "Termin")
-            await _send_all(
-                settings["notify_services"],
-                title=f"FamilyDaily — {summary}",
-                message=f"Beginnt um {time_str} (in {diff} Min.)",
+            person_ids = _parse_person_ids(ev.get("description"))
+            services = _services_for_persons(
+                person_ids, mappings, settings["notify_services"]
             )
-            await _mark_sent(db, key)
+            for service in services:
+                key = f"event_{entity_id}_{uid}_{ev_start_raw[:16]}_{service}"
+                if await _already_sent(db, key):
+                    continue
+                try:
+                    await _send_all(
+                        [service],
+                        title=f"FamilyDaily — {summary}",
+                        message=f"Beginnt um {time_str} (in {diff} Min.)",
+                    )
+                except Exception as exc:
+                    log.warning("Termin-Erinnerung an %s fehlgeschlagen: %s", service, exc)
+                    continue
+                await _mark_sent(db, key)
 
 
 # ─── Background loop ──────────────────────────────────────────────────────────
@@ -251,8 +306,6 @@ async def check_and_send() -> None:
         if not row or not row["enabled"]:
             return
         services = _row_services(row)
-        if not services:
-            return
         settings = {**dict(row), "notify_services": services}
         await _task_reminders(db, settings)
         await _event_reminders(db, settings)

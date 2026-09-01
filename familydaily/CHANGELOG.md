@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/)
 
 ---
 
+## [0.23.0] - 2026-09-01
+
+### Neu
+- Familienmitglieder lassen sich mit einem oder mehreren Home-Assistant-Notify-Geräten verbinden. Aufgaben und Termine mit mehreren Personen erreichen die Geräte aller markierten Personen, ohne doppelte Push-Nachrichten an gemeinsam genutzte Geräte.
+- Standardgeräte bleiben für Aufgaben und Termine ohne Personenzuordnung verfügbar.
+
+### Tests
+- Backendtests decken Gerätezuordnung, Mehrpersonen-Aufgaben, Mehrpersonen-Termine und den Standardversand ohne Person ab.
+
+---
+
 ## [0.22.0] - 2026-07-20
 
 ### Neu

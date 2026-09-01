@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS person (
     name TEXT NOT NULL,
     color TEXT NOT NULL DEFAULT '#4a90d9',
     emoji TEXT,
-    calendar_entity_id TEXT
+    calendar_entity_id TEXT,
+    notify_services TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS shopping_list (
     id INTEGER PRIMARY KEY,
@@ -104,6 +105,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 
 async def _migrate(db: aiosqlite.Connection) -> None:
+    cur = await db.execute("PRAGMA table_info(person)")
+    person_cols = [r[1] for r in await cur.fetchall()]
+    if "notify_services" not in person_cols:
+        await db.execute(
+            "ALTER TABLE person "
+            "ADD COLUMN notify_services TEXT NOT NULL DEFAULT '[]'"
+        )
     cur = await db.execute("PRAGMA table_info(recipe)")
     recipe_cols = [r[1] for r in await cur.fetchall()]
     if "favorite" not in recipe_cols:

@@ -2188,12 +2188,15 @@ async function viewEinstellungen() {
   if (!Array.isArray(ns.notify_services)) ns.notify_services = [];
 
   function personCard(p) {
+    const deviceCount = (p.notify_services || []).length;
     return el("div", { class: "person-card" },
       el("span", { class: "person-avatar", style: `background:${p.color}` }, p.emoji || p.name[0]),
       el("div", { class: "person-info" },
-        el("strong", {}, p.name)
+        el("strong", {}, p.name),
+        el("span", { class: "muted" },
+          deviceCount ? `${deviceCount} Gerät${deviceCount === 1 ? "" : "e"} verbunden` : "Kein Gerät verbunden")
       ),
-      el("button", { class: "btn-icon", onclick: () => openPersonForm(p) }, icon("pencil", 16)),
+      el("button", { class: "btn-icon", onclick: () => openPersonForm(p, allServices) }, icon("pencil", 16)),
       el("button", {
         class: "btn-icon del",
         onclick: async () => {
@@ -2239,7 +2242,11 @@ async function viewEinstellungen() {
   });
 
   // Gespeicherte Services bleiben wählbar, auch wenn HA gerade offline ist
-  const allServices = [...new Set([...notifSvc, ...ns.notify_services])];
+  const allServices = [...new Set([
+    ...notifSvc,
+    ...ns.notify_services,
+    ...persons.flatMap((p) => p.notify_services || []),
+  ])];
   const svcWrap = el("div", { class: "svc-list" });
   if (allServices.length === 0) {
     svcWrap.appendChild(el("p", { class: "muted", style: "font-size:0.85rem" },
@@ -2288,7 +2295,9 @@ async function viewEinstellungen() {
       ),
       toggleEl
     ),
-    el("p", { class: "form-field-label", style: "margin-top:4px" }, "Geräte (Notify-Services)"),
+    el("p", { class: "form-field-label", style: "margin-top:4px" }, "Standardgeräte"),
+    el("p", { class: "setting-hint", style: "margin-bottom:6px" },
+      "Für Aufgaben und Termine, denen keine Person zugewiesen ist."),
     svcWrap,
     el("p", { class: "form-field-label", style: "margin-top:10px" }, "Aufgaben-Erinnerung um"),
     timeInput,
@@ -2352,11 +2361,11 @@ async function viewEinstellungen() {
     el("div", { class: "card" },
       el("h2", {}, icon("users", 17), "Familienmitglieder"),
       el("p", { class: "setting-hint", style: "margin-bottom:10px" },
-        "Für Aufgaben-Zuweisung — Farbe und Emoji erscheinen als Avatar."),
+        "Personen mit ihren Geräten verbinden. Markierte Aufgaben und Termine werden nur an diese Geräte gesendet."),
       persons.length
         ? el("div", { class: "person-list" }, ...persons.map(personCard))
         : el("p", { class: "muted", style: "margin-bottom:12px" }, "Noch keine Personen angelegt"),
-      el("button", { class: "btn-soft", onclick: () => openPersonForm(null) },
+      el("button", { class: "btn-soft", onclick: () => openPersonForm(null, allServices) },
         icon("plus", 16), "Person hinzufügen")
     ),
 
@@ -2405,7 +2414,7 @@ async function viewEinstellungen() {
   );
 }
 
-function openPersonForm(existing) {
+function openPersonForm(existing, notifyServices = []) {
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) overlay.remove(); } });
 
   const nameInput  = el("input", { type: "text", placeholder: "Name", class: "form-input",
@@ -2414,6 +2423,19 @@ function openPersonForm(existing) {
     value: existing?.emoji || "", maxlength: "2" });
   const colorInput = el("input", { type: "color", class: "form-input",
     value: existing?.color || "#4a90d9" });
+
+  const selectedServices = new Set(existing?.notify_services || []);
+  const deviceWrap = el("div", { class: "svc-list" });
+  if (notifyServices.length) {
+    notifyServices.forEach((service) => {
+      const checkbox = el("input", { type: "checkbox", value: service });
+      checkbox.checked = selectedServices.has(service);
+      deviceWrap.appendChild(el("label", { class: "person-check-row" }, checkbox, " " + service));
+    });
+  } else {
+    deviceWrap.appendChild(el("p", { class: "muted", style: "font-size:0.85rem" },
+      "Keine Notify-Services in Home Assistant gefunden"));
+  }
 
   const errMsg = el("p", { class: "err", style: "display:none" });
 
@@ -2424,6 +2446,10 @@ function openPersonForm(existing) {
     emojiInput,
     el("p", { class: "form-field-label" }, "Farbe"),
     colorInput,
+    el("p", { class: "form-field-label", style: "margin-top:12px" }, "Geräte für Benachrichtigungen"),
+    el("p", { class: "setting-hint", style: "margin-bottom:6px" },
+      "Mehrere Geräte sind möglich; ein Gerät kann auch mehreren Personen gehören."),
+    deviceWrap,
     errMsg,
     el("div", { class: "form-btns" },
       el("button", { class: "btn-ghost", onclick: () => overlay.remove() }, "Abbrechen"),
@@ -2434,6 +2460,7 @@ function openPersonForm(existing) {
           name,
           emoji: emojiInput.value.trim() || null,
           color: colorInput.value,
+          notify_services: [...deviceWrap.querySelectorAll("input:checked")].map((cb) => cb.value),
         };
         if (existing) {
           await api.patch(`api/persons/${existing.id}`, payload);
